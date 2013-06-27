@@ -35,19 +35,19 @@ permissions:
         description: "Gives permission to view anyone's inventories, regardless of their permissions."
         children:
           eim.inv.view.inv.*:
-            description: "Gives permission to view anyone's vanilla inventory, regardless of their permissions."
+            description: "Gives permission to view anyone's vanilla Minecraft inventory, regardless of their permissions."
           eim.inv.view.ender.*:
-            description: "Gives permission to view anyone's vanilla ender chest inventory, regardless of their permissions."
+            description: "Gives permission to view anyone's vanilla Minecraft ender chest inventory, regardless of their permissions."
           eim.inv.view.extra.*:
-            description: "Gives permission to view any"
+            description: "Gives permission to view anyone's extra double-chest sized inventory, regardless of their permissions."
       eim.inv.edit.others:
-        description: ""
+        description: "Gives permission to edit another person's inventory, if they have that person's permission."
       eim.inv.edit.*:
-        description: ""
+        description: "Gives permission to edit anyone's inventories, regardless of their permissions."
         children:
           eim.inv.edit.inv.*:
-            description: ""
+            description: "Gives permission to edit anyone's vanilla Minecraft inventory, regardless of their permissions."
           eim.inv.edit.ender.*:
-            description: ""
+            description: "Gives permission to edit anyone's vanilla Minecraft ender chest inventory, regardless of their permissions."
           eim.inv.edit.extra.*:
-            description: ""
+            description: "Gives permission to edit anyone's extra double-chest sized inventory, regardless of their permissions."
