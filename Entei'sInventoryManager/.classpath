@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
+	<classpathentry kind="lib" path="F:/Java/Jars/craftbukkit-1.5.2-R0.1-20130502.180904-5.jar" sourcepath="F:/Java/JavaDocs/bukkit-source.zip">
+		<attributes>
+			<attribute name="javadoc_location" value="http://jd.bukkit.org/rb/apidocs/"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="F:/Java/Jars/Entei&apos;s Plugin Library.jar" sourcepath="/Entei&apos;sPluginLibrary"/>
+	<classpathentry kind="lib" path="F:/Java/Jars/Vault.jar" sourcepath="F:/Java/JavaDocs/Vault-master/src"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

@@ -1,0 +1,53 @@
+name: EnteisInventoryManager
+prefix: "Entei's Inventory Manager"
+main: com.gmail.br45entei.enteisinvmanager.MainInvClass
+author: Brian_Entei
+version: 0.1
+depend: [EnteisPluginLib]
+softdepend: [Vault]
+description: Manages per-world player inventories.
+
+commands:
+  eim:
+    description: "Master command for this plugin."
+    permission: "eim.cmd.use.eim"
+    permission-message: "You do not have access to that command."
+    usage: "/eim {info|save|reload}"
+    aliases: [enteisinventorymanager]
+  view:
+    description: "Lets you view other peoples' inventories."
+    permission: "eim.cmd.use.view"
+    permission-message: "You do not have permission to use that command."
+    usage: "/view {inv|ender|extra} or /view {playerName} {inv|ender|extra}"
+  invperm:
+    description: "Lets you control who can view your inventories."
+    permission: "eim.cmd.use.invperm"
+    permission-message: "You do not have permission to use that command."
+    usage: "/invperm {give|take} {view|edit} {inv|ender|extra} {playerName} or /invperm {ownerName} {give|take} {view|edit} {inv|ender|extra} {playerName}"
+
+permissions:
+  eim.*:
+    description: "Gives access to all permissions."
+    children:
+      eim.inv.view.others:
+        description: "Gives permission to view another person's inventory, if they have that person's permission."
+      eim.inv.view.*:
+        description: "Gives permission to view anyone's inventories, regardless of their permissions."
+        children:
+          eim.inv.view.inv.*:
+            description: "Gives permission to view anyone's vanilla inventory, regardless of their permissions."
+          eim.inv.view.ender.*:
+            description: "Gives permission to view anyone's vanilla ender chest inventory, regardless of their permissions."
+          eim.inv.view.extra.*:
+            description: "Gives permission to view any"
+      eim.inv.edit.others:
+        description: ""
+      eim.inv.edit.*:
+        description: ""
+        children:
+          eim.inv.edit.inv.*:
+            description: ""
+          eim.inv.edit.ender.*:
+            description: ""
+          eim.inv.edit.extra.*:
+            description: ""

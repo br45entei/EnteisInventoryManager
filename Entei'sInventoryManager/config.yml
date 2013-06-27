@@ -1,0 +1,13 @@
+showDebugMsgs: true
+noPermission: You do not have permission to use this command.
+
+# Set this to false to enable world inventory merging; true to disable.
+# Default: true
+worldsHaveSeparateInventories: true
+
+# Here you can list you own customized set of merged inventories.
+# Be sure to follow the template provided below.
+
+numberOfLists: 1
+
+list_1: "|skyworld|world"
