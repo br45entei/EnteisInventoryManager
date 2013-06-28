@@ -89,8 +89,8 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
 			player.getEnderChest().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"),  FolderName, dataFolderName), player/*, InventoryType.ENDER_CHEST*/).getContents());
 		} catch (Exception e) {
-			sendConsoleMessage(pluginName + (e.getCause() + "").replaceAll("\r", "\r" + pluginName).replaceAll("\n", "\n" + pluginName));
-			//savePlayerInventory(player, world);
+			sendConsoleMessage(pluginName + e.getMessage().replaceAll("\r", "\r" + pluginName).replaceAll("\n", "\n" + pluginName));
+			savePlayerInventory(player, world);
 		}
 	}
 	public static void savePlayerInventory(Player player, World world) {
