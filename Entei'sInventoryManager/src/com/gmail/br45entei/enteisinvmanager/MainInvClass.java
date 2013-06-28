@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import net.milkbowl.vault.permission.Permission;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -20,7 +19,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -79,17 +77,17 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
-		Inventory blankInv = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
+		//Inventory blankInv = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
 		try{
-			player.getInventory().setContents(blankInv.getContents());
-			player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
-			player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
-			Inventory newArmorInv = InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".armorInv"),  FolderName, dataFolderName), player/*, InventoryType.PLAYER*/);
-			player.getInventory().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".inv"),  FolderName, dataFolderName), player/*, InventoryType.PLAYER*/).getContents());
+			//player.getInventory().setContents(blankInv.getContents());
+			//player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
+			//player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
+			Inventory newArmorInv = InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".armorInv"), FolderName, dataFolderName), player/*, InventoryType.PLAYER*/);
+			player.getInventory().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".inv"), FolderName, dataFolderName), player/*, InventoryType.PLAYER*/).getContents());
 			player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
-			player.getEnderChest().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"),  FolderName, dataFolderName), player/*, InventoryType.ENDER_CHEST*/).getContents());
+			player.getEnderChest().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"), FolderName, dataFolderName), player/*, InventoryType.ENDER_CHEST*/).getContents());
 		} catch (Exception e) {
-			sendConsoleMessage(pluginName + e.getMessage().replaceAll("\r", "\r" + pluginName).replaceAll("\n", "\n" + pluginName));
+			e.printStackTrace();
 			savePlayerInventory(player, world);
 		}
 	}
