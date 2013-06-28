@@ -157,7 +157,7 @@ public class InventoryConverter {
 					Boolean createdItemStack = false;
 					String[] serializedItemStack = serializedBlock[1].split(":");
 					for(String itemInfo : serializedItemStack) {
-						ItemMeta meta = is.getItemMeta();
+						ItemMeta meta = Bukkit.getServer().getItemFactory().getItemMeta(is.getType());
 						String[] itemAttribute = itemInfo.split("@");
 						if(itemAttribute[0].equals("t")) {
 							is = new ItemStack(Material.getMaterial(Integer.valueOf(itemAttribute[1])));
