@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import net.milkbowl.vault.permission.Permission;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -19,6 +20,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -73,37 +75,51 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		// TODO End of Loading Files
 		sendConsoleMessage(pluginName + "&aVersion " + pdffile.getVersion() + " is now enabled!");
 	}
-	public static void loadPlayerInventory(Player player, World world) {
+	public static void loadPlayerInventory(Player player, World world, boolean wipeInvs) {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
-		//Inventory blankInv = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
+		Inventory blankInv = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
 		try{
-			//player.getInventory().setContents(blankInv.getContents());
-			//player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
-			//player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
-			Inventory newArmorInv = InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".armorInv"), FolderName, dataFolderName), player/*, InventoryType.PLAYER*/);
-			player.getInventory().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".inv"), FolderName, dataFolderName), player/*, InventoryType.PLAYER*/).getContents());
-			player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
-			player.getEnderChest().setContents(InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"), FolderName, dataFolderName), player/*, InventoryType.ENDER_CHEST*/).getContents());
+			if(wipeInvs) {
+				player.getInventory().setContents(blankInv.getContents());
+				player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
+				player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
+			}
+			try{player.getInventory().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".inv"), FolderName, dataFolderName, false), player).getContents());
+			} catch (Exception e) {
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".inv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's inventory instead.", true);
+				FileMgmt.WriteToFile((worldName + ".inv"), InventoryAPI.serializeInventory(player, "inventory"), true, FolderName, dataFolderName);
+			}
+			try{Inventory newArmorInv = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".armorInv"), FolderName, dataFolderName, false), player);
+				player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
+			} catch (Exception e) {
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".armorInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's armor instead.", true);
+				FileMgmt.WriteToFile((worldName + ".armorInv"), InventoryAPI.serializeInventory(player, "armor"), true, FolderName, dataFolderName);
+			}
+			try{player.getEnderChest().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"), FolderName, dataFolderName, false), player).getContents());
+			} catch (Exception e) {
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".enderInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's enderchest instead.", true);
+				FileMgmt.WriteToFile((worldName + ".enderInv"), InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			savePlayerInventory(player, world);
+			//savePlayerInventory(player, world);
 		}
 	}
 	public static void savePlayerInventory(Player player, World world) {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
-		FileMgmt.WriteToFile((worldName + ".inv"), InventoryConverter.InventoryToString(player, "inventory"), true, FolderName, dataFolderName);
-		FileMgmt.WriteToFile((worldName + ".armorInv"), InventoryConverter.InventoryToString(player, "armor"), true, FolderName, dataFolderName);
-		FileMgmt.WriteToFile((worldName + ".enderInv"), InventoryConverter.InventoryToString(player, "enderchest"), true, FolderName, dataFolderName);
+		FileMgmt.WriteToFile((worldName + ".inv"), InventoryAPI.serializeInventory(player, "inventory"), true, FolderName, dataFolderName);
+		FileMgmt.WriteToFile((worldName + ".armorInv"), InventoryAPI.serializeInventory(player, "armor"), true, FolderName, dataFolderName);
+		FileMgmt.WriteToFile((worldName + ".enderInv"), InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
 	}
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerJoinEvent(PlayerJoinEvent evt) {
 		Player newPlayer = evt.getPlayer();
 		if(worldsHaveSeparateInventories) {
-			loadPlayerInventory(newPlayer, newPlayer.getWorld());
+			loadPlayerInventory(newPlayer, newPlayer.getWorld(), false);
 		} else {
 			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + newPlayer.getName() + "&e\"'s inventory for world \"&a" + newPlayer.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
 			updatePlayerInventory(newPlayer, null, newPlayer.getWorld(), "load");
@@ -130,7 +146,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			//Save the old inventory to disk
 			savePlayerInventory(player, oldWorld);
 			//Load the new inventory from disk
-			loadPlayerInventory(player, newWorld);
+			loadPlayerInventory(player, newWorld, false);
 		} else {
 			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + player.getName() + "&e\"'s inventory for world \"&a" + player.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
 			updatePlayerInventory(player, oldWorld, newWorld, "both");
@@ -217,7 +233,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 										}
 									}
 									if(newWorld.getName().equalsIgnoreCase(curWorldName) || newWorld.getName().equalsIgnoreCase(primaryWorldName)) {
-										loadPlayerInventory(player, Bukkit.getServer().getWorld(primaryWorldName));
+										loadPlayerInventory(player, Bukkit.getServer().getWorld(primaryWorldName), true);
 										if(primaryWorldName.equalsIgnoreCase(newWorld.getName()) == false) {
 											sendConsoleMessage(pluginName + "&5&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory from world: \"&6" + primaryWorldName + "&a\" instead of loading from world \"&6" + newWorld.getName() + "&a\".");
 										} else {
@@ -244,7 +260,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			EPLib.unSpecifiedVarWarning("numberOfLists", configFileName, pluginName);
 		}
 	}
-	private static String sendConsoleMessage(String msg) {
+	static String sendConsoleMessage(String msg) {
 		return EPLib.sendConsoleMessage(msg);
 	}
 	private static String sendMessage(CommandSender target, String msg) {
@@ -668,7 +684,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		if(invName.equals(playerName + "'s Extra Inventory")) {
 			EPLib.showDebugMsg("&aSaved player \"&f" + player.getName() + "&a\"'s Inventory (\"&f" + invName + "&a\").", showDebugMsgs);
 			EPLib.showDebugMsg("&aDebug: State One(players' own extra chest)", showDebugMsgs);
-			savedInventory = FileMgmt.WriteToFile((worldName + ".extraChestInv"), InventoryConverter.serializeInventory(inv), true, FolderName, dataFolderName);
+			savedInventory = FileMgmt.WriteToFile((worldName + ".extraChestInv"), InventoryAPI.serializeInventory(inv), true, FolderName, dataFolderName);
 			sendMessage(player, (savedInventory ? "&eInventory \"&f" + invName + "&e\" was saved." : "&eUnable to save the inventory \"&f" + invName + "&e\"."));
 			playersUsingInventories.remove(player);
 			EPLib.showDebugMsg(pluginName + "&eDebug: Removed \"&f" + playerName + "&e\" from the list of players who are using a custom inventory screen!", showDebugMsgs);
@@ -683,7 +699,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					if(player.hasPermission("eim.inv.edit.others") || player.hasPermission("eim.inv.edit." + curPlayer.getName()) || player.hasPermission("eim.inv.*") || player.hasPermission("eim.inv.edit.*")) {
 						worldName = curPlayer.getWorld().getName().toLowerCase().replaceAll(" ", "_");
 						FolderName = "Inventories" + File.separatorChar + curPlayer.getName();
-						FileMgmt.WriteToFile(worldName + ".extraChestInv", InventoryConverter.serializeInventory(inv), true, FolderName, dataFolderName);
+						FileMgmt.WriteToFile(worldName + ".extraChestInv", InventoryAPI.serializeInventory(inv), true, FolderName, dataFolderName);
 						savedInventory = true;
 					} else {
 						
@@ -702,10 +718,10 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String playerName = target.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
 		String invName = (playerName + "'s Extra Inventory");
-		try{invToOpen = InventoryConverter.StringToInventory(FileMgmt.ReadFromFile((worldName + ".extraChestInv"), FolderName, dataFolderName), target/*, InventoryType.PLAYER*/);
+		try{invToOpen = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".extraChestInv"), FolderName, dataFolderName), target/*, InventoryType.PLAYER*/);
 		} catch(Exception e) {
 			invToOpen = Bukkit.getServer().createInventory(target, 54, invName);
-			FileMgmt.WriteToFile((worldName + ".extraChestInv"), InventoryConverter.serializeInventory(invToOpen), true, FolderName, dataFolderName);
+			FileMgmt.WriteToFile((worldName + ".extraChestInv"), InventoryAPI.serializeInventory(invToOpen), true, FolderName, dataFolderName);
 		}
 		return invToOpen;
 	}
