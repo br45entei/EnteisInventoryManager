@@ -106,7 +106,14 @@ public class InventoryAPI {
 	 * The "36;" is the size of the inventory(in slots), and the "container.inventory;" is the title of the inventory(That is the default Minecraft title, anything else that you type here will be displayed instead of 'Inventory').<br>
 	 * Deleting these two stored values will render the whole inventory un-readable, and upon being read from by {@link InventoryAPI#deserializeInventory(String)}, will be returned null.
 	 * @param inv Inventory
-	 * @return The given Inventory, serialized into a single-line String.<p> */
+	 * @return The given Inventory, serialized into a single-line String.<p>
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
+	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
 	public static String serializeInventory(Inventory inv) {
 		/**/
 		String serialization = inv.getSize() + ";" + inv.getTitle() + ";";
@@ -154,24 +161,25 @@ public class InventoryAPI {
 	}
 	/**This function is the same as {@link InventoryAPI#deserializeInventory(String, Player)}, except for the Player parameter, which is null.
 	 * @param invString String
-	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
 	 * @return The inventory with no holder, or null, if no string is given.
-	 * @see {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player, String)}
-	 * {@link InventoryAPI#serializeInventory(Player)}
-	 * {@link InventoryAPI#deserializeInventory(String, Player)}
-	 * {@link InventoryAPI#serializeBook(ItemStack)}
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
+	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
 	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
 	public static Inventory deserializeInventory(String invString) {return deserializeInventory(invString, null);}
-	/** @param invString String
+	/**Attempts to return the Inventory of the Player, deserialized from the String parameter. The Inventory that is returned will be owned by the Player.
+	 * @param invString String
 	 * @param player Player
 	 * @return The deserialized inventory with the given player parameter as the holder, or the players' inventory, if no string is given. If neither a string nor a player is given, then this function returns null.
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
-	 * @see {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player, String)}
-	 * {@link InventoryAPI#serializeInventory(Player)}
-	 * {@link InventoryAPI#deserializeInventory(String)}
-	 * {@link InventoryAPI#serializeBook(ItemStack)}
+	 * @see {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
+	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
 	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
 	@SuppressWarnings("boxing")
 	public static Inventory deserializeInventory(String invString, Player player) {
@@ -266,11 +274,11 @@ public class InventoryAPI {
 	 * @param invToConvert String
 	 * @return The serialized inventory as a single-line String. If the Player parameter is null, then a blank String is returned. If the String parameter is null, or isn't one of the options listed, the player's default inventory is returned, serialized as a single-line String. If both the Player and the String parameters are null, a blank String is returned.
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
-	 * @see {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player)}
-	 * {@link InventoryAPI#deserializeInventory(String)}
-	 * {@link InventoryAPI#deserializeInventory(String, Player)}
-	 * {@link InventoryAPI#serializeBook(ItemStack)}
+	 * @see {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
+	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
 	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
 	public static String serializeInventory(Player player, String invToConvert) {
 		if(player != null) {
@@ -302,22 +310,22 @@ public class InventoryAPI {
 	 * @param player Player
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
 	 * @return The player's default Inventory, serialized as a single-line String. If the player is null, a blank string is returned.
-	 * @see {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player, String)}
-	 * {@link InventoryAPI#deserializeInventory(String)}
-	 * {@link InventoryAPI#deserializeInventory(String, Player)}
-	 * {@link InventoryAPI#serializeBook(ItemStack)}
+	 * @see {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
+	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
 	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
 	public static String serializeInventory(Player player) {return serializeInventory(player, null);}
 	/**Attempts to serialize the given ItemStack and return it as a single-line String. If the ItemStack provided is not a Book and Quill or a Written Book, this function will return a blank string.
 	 * @param item ItemStack
 	 * @return The given ItemStack in a serialized single-line String if it is a Book and Quill or a Written Book. Otherwise, a blank string is returned.
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
-	 * @see {@link InventoryAPI#deserializeBook(ItemStack, String[])}
-	 * {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player, String)}
-	 * {@link InventoryAPI#serializeInventory(Player)}
-	 * {@link InventoryAPI#deserializeInventory(String)}
+	 * @see {@link InventoryAPI#deserializeBook(ItemStack, String[])}<br>
+	 * {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)} */
 	public static String serializeBook(ItemStack item) {
 		String rtrn = ":b@";
@@ -351,11 +359,11 @@ public class InventoryAPI {
 	 * @param itemAttribute String[]
 	 * @return The deserialized Book, with all of its previous BookMeta intact. If the String[] parameter is null, then this will return the given ItemStack.
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
-	 * @see {@link InventoryAPI#serializeBook(ItemStack)}
-	 * {@link InventoryAPI#serializeInventory(Inventory)}
-	 * {@link InventoryAPI#serializeInventory(Player, String)}
-	 * {@link InventoryAPI#serializeInventory(Player)}
-	 * {@link InventoryAPI#deserializeInventory(String)}
+	 * @see {@link InventoryAPI#serializeBook(ItemStack)}<br>
+	 * {@link InventoryAPI#serializeInventory(Inventory)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
+	 * {@link InventoryAPI#serializeInventory(Player)}<br>
+	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)} */
 	public static ItemStack deserializeBook(ItemStack item, String[] itemAttribute) {
 		if(item == null && itemAttribute == null) {return new ItemStack(Material.BOOK_AND_QUILL);}
@@ -395,7 +403,93 @@ public class InventoryAPI {
 	public static Inventory setTitle(String str, Inventory inv) {
 		Inventory newInv = Bukkit.getServer().createInventory(inv.getHolder(), inv.getSize(), str);
 		newInv.setContents(inv.getContents());
+		newInv.setMaxStackSize(inv.getMaxStackSize());//In case some of you out there need this to do this.
 		return newInv;
 	}
-	
+	/**Attempts to return the given experience and level serialized, as a single-line String.
+	 * @param level Integer
+	 * @param exp float
+	 * @return The serialized result, or a blank string if the given parameters somehow had no value.
+	 * @see {@link InventoryAPI#serializeExperience(Player)}<br>
+	 * {@link InventoryAPI#deserializeExperience(String)}<br>
+	 * {@link InventoryAPI#deserializeExp(String)}<br>
+	 * {@link InventoryAPI#deserializeLevel(String)} */
+	public static String serializeExperience(int level, float exp) {
+		String rtrn = ":x@";
+		rtrn += level + "@" + exp;
+		return (rtrn.equals(":x@") ? "" : (rtrn.equals(":x@@") ? "" : rtrn));
+	}
+	/**Attempts to serialize the level and experience of the given Player as a single-line String.<br>
+	 * This function uses {@link InventoryAPI#serializeExperience(int, float)} for deserialization.
+	 * @param player Player
+	 * @return The serialized form of the given Player's experience and level.
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#serializeExperience(int, float)}<br>
+	 * {@link InventoryAPI#deserializeExperience(String)}<br>
+	 * {@link InventoryAPI#deserializeExp(String)}<br>
+	 * {@link InventoryAPI#deserializeLevel(String)}*/
+	public static String serializeExperience(Player player) {return serializeExperience(player.getLevel(), player.getExp());}
+	/**Attempts to return a String[] array containing the Integer level and the float experience, deserialized from the String parameter.
+	 * @param serializedExp String
+	 * @return A String[] array containing the Integer level and the float experience, deserialized from the String parameter. May return values that are not an Integer or a float in the String[] array, so it is recommended to either check the result of this function or use one(or both) of the following functions instead:<br>{@link InventoryAPI#deserializeExp(String)}<br>{@link InventoryAPI#deserializeLevel(String)}
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#deserializeExp(String)}<br>
+	 * {@link InventoryAPI#deserializeLevel(String)}<br>
+	 * {@link InventoryAPI#serializeExperience(int, float)}<br>
+	 * {@link InventoryAPI#serializeExperience(Player)} */
+	public static String[] deserializeExperience(String serializedExp) {return serializedExp.replace(":x@", "").split("@");}
+	/**Attempts to return the int value of the deserialized level.<br>
+	 * This function uses {@link InventoryAPI#deserializeExperience(String)} for deserialization.
+	 * @param serializedExp String
+	 * @return The int value of the deserialized level, or 0 if the deserialization did not return a valid Integer.
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#deserializeExperience(String)}
+	 * {@link InventoryAPI#deserializeExp(String)}
+	 * {@link InventoryAPI#serializeExperience(int, float)}
+	 * {@link InventoryAPI#serializeExperience(Player)} */
+	public static int deserializeLevel(String serializedExp) {
+		int rtrn = 0;
+		int num = 0;
+		for(String curNum : deserializeExperience(serializedExp)) {
+			num++;
+			boolean isInt = true;
+			if(num == 1) {
+				try{Integer.parseInt(curNum);
+				} catch (NumberFormatException e) {
+					isInt = false;
+				}
+				if(isInt) {
+					rtrn = Integer.parseInt(curNum);
+				}
+			}
+		}
+		return rtrn;
+	}
+	/**Attempts to return the float value of the deserialized experience.<br>
+	 * This function uses {@link InventoryAPI#deserializeExperience(String)} for deserialization.
+	 * @param serializedExp String
+	 * @return The float value of the deserialized experience, or 0 if the deserialization did not return a valid float.
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 * @see {@link InventoryAPI#deserializeExperience(String)}<br>
+	 * {@link InventoryAPI#deserializeLevel(String)}<br>
+	 * {@link InventoryAPI#serializeExperience(int, float)}<br>
+	 * {@link InventoryAPI#serializeExperience(Player)} */
+	public static float deserializeExp(String serializedExp) {
+		float rtrn = 0;
+		int num = 0;
+		for(String curNum : deserializeExperience(serializedExp)) {
+			num++;
+			boolean isFloat = true;
+			if(num == 2) {
+				try{Float.parseFloat(curNum);
+				} catch (NumberFormatException e) {
+					isFloat = false;
+				}
+				if(isFloat) {
+					rtrn = Float.parseFloat(curNum);
+				}
+			}
+		}
+		return rtrn;
+	}
 }

@@ -2,4 +2,8 @@
 /.settings
 /.classpath
 /.project
+/ExportToDebugServer.jardesc
+/ExportToLibrary.jardesc
 /ExportToServer.jardesc
+/ExportToUploadFolder(Win7).jardesc
+/ExportToUploadFolder(WinXP).jardesc

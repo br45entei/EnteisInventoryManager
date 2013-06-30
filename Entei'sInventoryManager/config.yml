@@ -11,3 +11,5 @@ worldsHaveSeparateInventories: true
 numberOfLists: 1
 
 list_1: "|skyworld|world"
+
+manageExp: true

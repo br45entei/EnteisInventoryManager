@@ -50,6 +50,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	public static boolean showDebugMsgs;
 	public static String noPerm = "";
 	public static boolean worldsHaveSeparateInventories = false;
+	public static boolean manageExp = false;
 	
 	// TODO Functions
  	public void LoginListener(MainInvClass JavaPlugin) {
@@ -85,27 +86,38 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				player.getInventory().setContents(blankInv.getContents());
 				player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
 				player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
+				if(manageExp) {
+					player.setLevel(0);
+					player.setExp(0);
+				}
 			}
 			try{player.getInventory().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".inv"), FolderName, dataFolderName, false), player).getContents());
 			} catch (Exception e) {
-				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".inv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's inventory instead.", true);
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".inv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's current inventory instead.", true);
 				FileMgmt.WriteToFile((worldName + ".inv"), InventoryAPI.serializeInventory(player, "inventory"), true, FolderName, dataFolderName);
 			}
 			try{Inventory newArmorInv = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".armorInv"), FolderName, dataFolderName, false), player);
 				player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
 			} catch (Exception e) {
-				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".armorInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's armor instead.", true);
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".armorInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's current armor instead.", true);
 				FileMgmt.WriteToFile((worldName + ".armorInv"), InventoryAPI.serializeInventory(player, "armor"), true, FolderName, dataFolderName);
 			}
 			try{player.getEnderChest().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile((worldName + ".enderInv"), FolderName, dataFolderName, false), player).getContents());
 			} catch (Exception e) {
-				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".enderInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's enderchest instead.", true);
+				EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".enderInv") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's current enderchest instead.", true);
 				FileMgmt.WriteToFile((worldName + ".enderInv"), InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
 			}
-		} catch (Exception e) {
-			e.printStackTrace();
-			//savePlayerInventory(player, world);
-		}
+			if(manageExp) {
+				try{player.setLevel(InventoryAPI.deserializeLevel(FileMgmt.ReadFromFile((worldName + ".exp"), FolderName, dataFolderName, false)));
+					player.setExp(InventoryAPI.deserializeExp(FileMgmt.ReadFromFile((worldName + ".exp"), FolderName, dataFolderName, false)));
+				} catch (Exception e) {
+					EPLib.showDebugMsg("&eError loading file \"&f" + (worldName + ".exp") + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Saving over it from player's current exp instead.", true);
+					FileMgmt.WriteToFile((worldName + ".exp"), InventoryAPI.serializeExperience(player), true, FolderName, dataFolderName);
+				}
+			} else {
+				EPLib.sendOneTimeMessage(pluginName + "&eThe var \"&fmanageExp&e\" was set to false in the config.yml; not managing player experience levels.", "console");
+			}
+		} catch (Exception e) {e.printStackTrace();/*savePlayerInventory(player, world);*/}
 	}
 	public static void savePlayerInventory(Player player, World world) {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
@@ -114,6 +126,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		FileMgmt.WriteToFile((worldName + ".inv"), InventoryAPI.serializeInventory(player, "inventory"), true, FolderName, dataFolderName);
 		FileMgmt.WriteToFile((worldName + ".armorInv"), InventoryAPI.serializeInventory(player, "armor"), true, FolderName, dataFolderName);
 		FileMgmt.WriteToFile((worldName + ".enderInv"), InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
+		if(manageExp) {FileMgmt.WriteToFile((worldName + ".exp"), InventoryAPI.serializeExperience(player), true, FolderName, dataFolderName);} else {EPLib.sendOneTimeMessage(pluginName + "&eThe var \"&fmanageExp&e\" was set to false in the config.yml; not managing player experience levels.", "console");}
 	}
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerJoinEvent(PlayerJoinEvent evt) {
@@ -346,6 +359,9 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("noPermission", "config.yml", pluginName);}
 		try{worldsHaveSeparateInventories = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("worldsHaveSeparateInventories")))) == true;
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("worldsHaveSeparateInventories", "config.yml", pluginName);}
+		
+		try{manageExp = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("manageExp")))) == true;
+		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("manageExp", "config.yml", pluginName);}
 		
 		return loadedAllVars;
 	}
