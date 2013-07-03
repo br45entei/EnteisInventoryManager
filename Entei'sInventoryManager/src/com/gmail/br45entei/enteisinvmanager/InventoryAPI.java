@@ -19,17 +19,31 @@ import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
 /**This class is a useful tool if you want a simple way to convert any inventory to a String, and vice versa.
- * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>*/
+ * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+ */
 public class InventoryAPI {
+	/**This is the tag that is used to start the item listings when serializing.
+	 */
+	private static String item_start = "#";
+	/**This is the tag that is used at the end of every serialized ItemStack.
+	 */
+	private static String item_separator = ";";
+	/**This is the tag that is used at the start of every item attribute(like an enchantment, item damage, item lore, the book title, the item's name, the book author, a book page, etc.)
+	 */
+	private static String attribute_start = ":";
+	/**This is the tag that is used to separate every item attribute(like an enchantment, item damage, item lore, the book title, the item's name, the book author, a book page, etc.)
+	 */
+	private static String attribute_separator = "@";
 	/**Converts a set of symbols that are used within the serializing functions to prevent data corruption, as well as any ChatColor characters(it changes them to their respective '&' codes). 
 	 * @param str String
 	 * @return The given string, with certain symbols changed to keep inventory formatting from getting broken because of a simple character.
-	 * @see InventoryAPI#convertSymbolsForLoading(String str) */
+	 * @see InventoryAPI#convertSymbolsForLoading(String str)
+	 */
 	public static String convertSymbolsForSaving(String str) {
-		str = str.replaceAll(";", "<semi-colon>")
-			.replaceAll("#", "<numeral-sign>")
-			.replaceAll(":", "<colon>")
-			.replaceAll("@", "<at-sign>")
+		str = str.replaceAll(item_separator, "<item_separator>")
+			.replaceAll(item_start, "<item_start>")
+			.replaceAll(attribute_start, "<attribute_start>")
+			.replaceAll(attribute_separator, "<attribute_separator>")
 			.replaceAll("\n", "<Nline>")
 			.replaceAll("\r", "<Rline>")
 			.replaceAll("(?i)\u00A7b","&b")
@@ -59,12 +73,13 @@ public class InventoryAPI {
 	/**The opposite function of {@link InventoryAPI#convertSymbolsForSaving(String)}.
 	 * @param str String
 	 * @return The given string, restored to its original state.
-	 * @see {@link InventoryAPI#convertSymbolsForSaving(String str)} */
+	 * @see {@link InventoryAPI#convertSymbolsForSaving(String str)}
+	 */
 	public static String convertSymbolsForLoading(String str) {
-		str = str.replaceAll("<semi-colon>", ";")
-			.replaceAll("<numeral-sign>", "#")
-			.replaceAll("<colon>", ":")
-			.replaceAll("<at-sign>", "@")
+		str = str.replaceAll("<item_separator>", item_separator)
+			.replaceAll("<item_start>", item_start)
+			.replaceAll("<attribute_start>", attribute_start)
+			.replaceAll("<attribute_separator>", attribute_separator)
 			.replaceAll("<Nline>", "\n")
 			.replaceAll("<Rline>", "\r")
 			.replaceAll("(?i)&0",ChatColor.BLACK+"")
@@ -113,48 +128,48 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
 	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
-	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])}
+	 */
 	public static String serializeInventory(Inventory inv) {
-		/**/
-		String serialization = inv.getSize() + ";" + inv.getTitle() + ";";
+		String serialization = inv.getSize() + item_separator + inv.getTitle() + item_separator;
 		for(int i = 0; i < inv.getSize(); i++) {
 			ItemStack is = inv.getItem(i);
 			if(is != null) {
 				String serializedItemStack = new String();
 				String isType = String.valueOf(is.getType().getId());
-				serializedItemStack += "t@" + isType;
+				serializedItemStack += "t" + attribute_separator + isType;
 				if(is.getDurability() != 0) {
 					String isDurability = String.valueOf(is.getDurability());
-					serializedItemStack += ":d@" + isDurability;
+					serializedItemStack += attribute_start + "d" + attribute_separator + isDurability;
 				}
 				if(is.getAmount() != 1) {
 					String isAmount = String.valueOf(is.getAmount());
-					serializedItemStack += ":a@" + isAmount;
+					serializedItemStack += attribute_start + "a" + attribute_separator + isAmount;
 				}
 				Map<Enchantment,Integer> isEnch = is.getEnchantments();
 				if(isEnch.size() > 0) {
 					for(Entry<Enchantment,Integer> ench : isEnch.entrySet()) {
-						serializedItemStack += ":e@" + ench.getKey().getId() + "@" + ench.getValue();
+						serializedItemStack += attribute_start + "e" + attribute_separator + ench.getKey().getId() + "attribute_separator" + ench.getValue();
 					}
 				}
 				if(is.getItemMeta().hasDisplayName()) {
-					serializedItemStack += ":n@" + convertSymbolsForSaving(is.getItemMeta().getDisplayName());
+					serializedItemStack += attribute_start + "n" + attribute_separator + convertSymbolsForSaving(is.getItemMeta().getDisplayName());
 				}
 				if(is.getItemMeta().hasLore()) {
 					Iterator<String> it = is.getItemMeta().getLore().iterator();
-					String lores = ":l";
+					String lores = attribute_start + "l";
 					if(it.hasNext() == false) {
-						lores += "@";
+						lores += attribute_separator;
 					}
 					while(it.hasNext()) {
-						lores += "@" + convertSymbolsForSaving(it.next());
+						lores += attribute_separator + convertSymbolsForSaving(it.next());
 					}
 					serializedItemStack += lores;
 				}
 				if(is.getType() == Material.BOOK_AND_QUILL || is.getType() == Material.WRITTEN_BOOK) {
 					serializedItemStack += serializeBook(is);
 				}
-				serialization += i + "#" + serializedItemStack + ";";
+				serialization += i + item_start + serializedItemStack + item_separator;
 			}
 		}
 		return serialization;
@@ -168,8 +183,11 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#serializeInventory(Player)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
 	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
-	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
-	public static Inventory deserializeInventory(String invString) {return deserializeInventory(invString, null);}
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])}
+	 */
+	public static Inventory deserializeInventory(String invString) {
+		return deserializeInventory(invString, null);
+	}
 	/**Attempts to return the Inventory of the Player, deserialized from the String parameter. The Inventory that is returned will be owned by the Player.
 	 * @param invString String
 	 * @param player Player
@@ -180,28 +198,29 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#serializeInventory(Player)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
-	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])}
+	 */
 	@SuppressWarnings("boxing")
 	public static Inventory deserializeInventory(String invString, Player player) {
 		if(invString != null) {
 			if(invString.equals("") == false) {
-				String[] serializedBlocks = invString.split(";");
+				String[] serializedBlocks = invString.split(item_separator);
 				//String invInfo = serializedBlocks[0];
 				//Inventory deserializedInventory = Bukkit.getServer().createInventory(player, invType);
 				//Inventory deserializedInventory = Bukkit.getServer().createInventory(player, Integer.valueOf(invInfo));
 				Inventory deserializedInventory = Bukkit.getServer().createInventory(player, Integer.valueOf(serializedBlocks[0]), String.valueOf(serializedBlocks[1]));
 				//for(int i = 1; i < serializedBlocks.length; i++) {
 				for(int i = 2; i < serializedBlocks.length; i++) {
-					String[] serializedBlock = serializedBlocks[i].split("#");
+					String[] serializedBlock = serializedBlocks[i].split(item_start);
 					int stackPosition = Integer.valueOf(serializedBlock[0]);
 					if(stackPosition >= deserializedInventory.getSize()) {
 						continue;
 					}
 					ItemStack is = null;
 					Boolean createdItemStack = false;
-					String[] serializedItemStack = serializedBlock[1].split(":");
+					String[] serializedItemStack = serializedBlock[1].split(attribute_start);
 					for(String itemInfo : serializedItemStack) {
-						String[] itemAttribute = itemInfo.split("@");
+						String[] itemAttribute = itemInfo.split(attribute_separator);
 						if(itemAttribute[0].equals("t")) {
 							is = new ItemStack(Material.getMaterial(Integer.valueOf(itemAttribute[1])));
 							createdItemStack = true;
@@ -218,21 +237,14 @@ public class InventoryAPI {
 								} else {
 									meta = is.getItemMeta();
 								}
-								//if(meta != null) {
-									meta.setDisplayName(convertSymbolsForLoading(itemAttribute[1]));
-									is.setItemMeta(meta);
-									MainInvClass.sendConsoleMessage("&aDebug: Set item \"" + (is.getType().name().toLowerCase().replaceAll("_", " ")).trim() + "\"'s display name to: &f" + convertSymbolsForLoading(itemAttribute[1]));
-								//} else {
-								//	MainInvClass.sendConsoleMessage("&aDebug: &6meta&a == &cnull&a!");
-								//}
+								meta.setDisplayName(convertSymbolsForLoading(itemAttribute[1]));
+								is.setItemMeta(meta);
 							} else if(itemAttribute[0].equals("e")) {
 								is.addUnsafeEnchantment(Enchantment.getById(Integer.valueOf(itemAttribute[1])), Integer.valueOf(itemAttribute[2]));
 							} else if(itemAttribute[0].equals("l")) {
 								ArrayList<String> lores = new ArrayList<String>();
 								for(int j = 1; j < itemAttribute.length; j++) {
-									MainInvClass.sendConsoleMessage("&aDebug: j = " + j);
 									lores.add(convertSymbolsForLoading(itemAttribute[j]));
-									MainInvClass.sendConsoleMessage("&aDebug: Added lore: \"&f" + convertSymbolsForLoading(itemAttribute[j]) + "&r&a\"");
 								}
 								ItemMeta meta = null;
 								if(is.getItemMeta() == null) {
@@ -240,12 +252,8 @@ public class InventoryAPI {
 								} else {
 									meta = is.getItemMeta();
 								}
-								//if(meta != null) {
-									meta.setLore(lores);
-									is.setItemMeta(meta);
-								//} else {
-								//	MainInvClass.sendConsoleMessage("&aDebug: &6meta&a == &cnull&a!");
-								//}
+								meta.setLore(lores);
+								is.setItemMeta(meta);
 							} else if(itemAttribute[0].equals("b")) {
 								is = deserializeBook(is, itemAttribute);
 							}
@@ -279,7 +287,8 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
 	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
-	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])}
+	 */
 	public static String serializeInventory(Player player, String invToConvert) {
 		if(player != null) {
 			Inventory invInventory = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
@@ -315,8 +324,11 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String, Player)}<br>
 	 * {@link InventoryAPI#serializeBook(ItemStack)}<br>
-	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])} */
-	public static String serializeInventory(Player player) {return serializeInventory(player, null);}
+	 * {@link InventoryAPI#deserializeBook(ItemStack, String[])}
+	 */
+	public static String serializeInventory(Player player) {
+		return serializeInventory(player, null);
+	}
 	/**Attempts to serialize the given ItemStack and return it as a single-line String. If the ItemStack provided is not a Book and Quill or a Written Book, this function will return a blank string.
 	 * @param item ItemStack
 	 * @return The given ItemStack in a serialized single-line String if it is a Book and Quill or a Written Book. Otherwise, a blank string is returned.
@@ -326,7 +338,8 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
 	 * {@link InventoryAPI#serializeInventory(Player)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
-	 * {@link InventoryAPI#deserializeInventory(String, Player)} */
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}
+	 */
 	public static String serializeBook(ItemStack item) {
 		String rtrn = ":b@";
 		BookMeta meta;
@@ -347,8 +360,7 @@ public class InventoryAPI {
 			if(meta.hasPages()) {
 				List<String> pages = meta.getPages();
 				for(String curPage : pages) {
-					rtrn += "@" + convertSymbolsForSaving(curPage);
-					//The start of the pages will be itemAttribute[3] and up.
+					rtrn += "@" + convertSymbolsForSaving(curPage);//The start of the pages will be itemAttribute[3] and up.
 				}
 			}
 		}
@@ -364,7 +376,8 @@ public class InventoryAPI {
 	 * {@link InventoryAPI#serializeInventory(Player, String)}<br>
 	 * {@link InventoryAPI#serializeInventory(Player)}<br>
 	 * {@link InventoryAPI#deserializeInventory(String)}<br>
-	 * {@link InventoryAPI#deserializeInventory(String, Player)} */
+	 * {@link InventoryAPI#deserializeInventory(String, Player)}
+	 */
 	public static ItemStack deserializeBook(ItemStack item, String[] itemAttribute) {
 		if(item == null && itemAttribute == null) {return new ItemStack(Material.BOOK_AND_QUILL);}
 		if(item == null) {item = new ItemStack(Material.WRITTEN_BOOK);}
@@ -399,7 +412,8 @@ public class InventoryAPI {
 	 * @param str String
 	 * @param inv Inventory
 	 * @return The inv parameter with the new title.
-	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a> */
+	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
+	 */
 	public static Inventory setTitle(String str, Inventory inv) {
 		Inventory newInv = Bukkit.getServer().createInventory(inv.getHolder(), inv.getSize(), str);
 		newInv.setContents(inv.getContents());
@@ -413,11 +427,12 @@ public class InventoryAPI {
 	 * @see {@link InventoryAPI#serializeExperience(Player)}<br>
 	 * {@link InventoryAPI#deserializeExperience(String)}<br>
 	 * {@link InventoryAPI#deserializeExp(String)}<br>
-	 * {@link InventoryAPI#deserializeLevel(String)} */
+	 * {@link InventoryAPI#deserializeLevel(String)}
+	 */
 	public static String serializeExperience(int level, float exp) {
-		String rtrn = ":x@";
+		String rtrn = "x@";
 		rtrn += level + "@" + exp;
-		return (rtrn.equals(":x@") ? "" : (rtrn.equals(":x@@") ? "" : rtrn));
+		return (rtrn.equals("x@") ? "" : (rtrn.equals("x@@") ? "" : rtrn));
 	}
 	/**Attempts to serialize the level and experience of the given Player as a single-line String.<br>
 	 * This function uses {@link InventoryAPI#serializeExperience(int, float)} for deserialization.
@@ -427,8 +442,11 @@ public class InventoryAPI {
 	 * @see {@link InventoryAPI#serializeExperience(int, float)}<br>
 	 * {@link InventoryAPI#deserializeExperience(String)}<br>
 	 * {@link InventoryAPI#deserializeExp(String)}<br>
-	 * {@link InventoryAPI#deserializeLevel(String)}*/
-	public static String serializeExperience(Player player) {return serializeExperience(player.getLevel(), player.getExp());}
+	 * {@link InventoryAPI#deserializeLevel(String)}
+	 */
+	public static String serializeExperience(Player player) {
+		return serializeExperience(player.getLevel(), player.getExp());
+	}
 	/**Attempts to return a String[] array containing the Integer level and the float experience, deserialized from the String parameter.
 	 * @param serializedExp String
 	 * @return A String[] array containing the Integer level and the float experience, deserialized from the String parameter. May return values that are not an Integer or a float in the String[] array, so it is recommended to either check the result of this function or use one(or both) of the following functions instead:<br>{@link InventoryAPI#deserializeExp(String)}<br>{@link InventoryAPI#deserializeLevel(String)}
@@ -436,8 +454,11 @@ public class InventoryAPI {
 	 * @see {@link InventoryAPI#deserializeExp(String)}<br>
 	 * {@link InventoryAPI#deserializeLevel(String)}<br>
 	 * {@link InventoryAPI#serializeExperience(int, float)}<br>
-	 * {@link InventoryAPI#serializeExperience(Player)} */
-	public static String[] deserializeExperience(String serializedExp) {return serializedExp.replace(":x@", "").split("@");}
+	 * {@link InventoryAPI#serializeExperience(Player)}
+	 */
+	public static String[] deserializeExperience(String serializedExp) {
+		return serializedExp.replace("x@", "").split("@");
+	}
 	/**Attempts to return the int value of the deserialized level.<br>
 	 * This function uses {@link InventoryAPI#deserializeExperience(String)} for deserialization.
 	 * @param serializedExp String
@@ -446,7 +467,8 @@ public class InventoryAPI {
 	 * @see {@link InventoryAPI#deserializeExperience(String)}
 	 * {@link InventoryAPI#deserializeExp(String)}
 	 * {@link InventoryAPI#serializeExperience(int, float)}
-	 * {@link InventoryAPI#serializeExperience(Player)} */
+	 * {@link InventoryAPI#serializeExperience(Player)}
+	 */
 	public static int deserializeLevel(String serializedExp) {
 		int rtrn = 0;
 		int num = 0;
@@ -473,7 +495,8 @@ public class InventoryAPI {
 	 * @see {@link InventoryAPI#deserializeExperience(String)}<br>
 	 * {@link InventoryAPI#deserializeLevel(String)}<br>
 	 * {@link InventoryAPI#serializeExperience(int, float)}<br>
-	 * {@link InventoryAPI#serializeExperience(Player)} */
+	 * {@link InventoryAPI#serializeExperience(Player)}
+	 */
 	public static float deserializeExp(String serializedExp) {
 		float rtrn = 0;
 		int num = 0;
