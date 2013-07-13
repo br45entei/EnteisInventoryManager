@@ -114,7 +114,7 @@ public class InventoryAPI {
 	 * :e@ = Item Enchantment Data<br>
 	 * :l@ = Item Lore Data<br>
 	 * :n@ = Item Name<br>
-	 * :b@ = Book Data
+	 * :b@ = Book Data<br>
 	 * You can add an additional '@' after a tag to specify additional data if it has the word 'Data' in it's name above.<p>
 	 * <strong>An example of a player inventory, containing a Stone Pickaxe, with the custom Name "Hello, world!" and some enchantments and lore:</strong><br>
 	 * <font face="consolas" size="2">36;container.inventory;0#t@274:d@60:e@34@3:e@35@1:e@32@2:n@&3Hello, world!:l@&4The item's Lore, Line One@&2The Item's Lore, Line Two@Etc, &3etc.;</font><br>
@@ -149,7 +149,7 @@ public class InventoryAPI {
 				Map<Enchantment,Integer> isEnch = is.getEnchantments();
 				if(isEnch.size() > 0) {
 					for(Entry<Enchantment,Integer> ench : isEnch.entrySet()) {
-						serializedItemStack += attribute_start + "e" + attribute_separator + ench.getKey().getId() + "attribute_separator" + ench.getValue();
+						serializedItemStack += attribute_start + "e" + attribute_separator + ench.getKey().getId() + attribute_separator + ench.getValue();
 					}
 				}
 				if(is.getItemMeta().hasDisplayName()) {
@@ -415,6 +415,7 @@ public class InventoryAPI {
 	 * @author <a href="http://enteisislandsurvival.no-ip.org/about/author.html">Brian_Entei</a>
 	 */
 	public static Inventory setTitle(String str, Inventory inv) {
+		//MainInvClass.sendConsoleMessage("&eDebug: The inventory's size is: \"&f" + inv.getSize() + "&e\"!");
 		Inventory newInv = Bukkit.getServer().createInventory(inv.getHolder(), inv.getSize(), str);
 		newInv.setContents(inv.getContents());
 		newInv.setMaxStackSize(inv.getMaxStackSize());//In case some of you out there need this to do this.

@@ -19,11 +19,12 @@ commands:
     permission: "eim.cmd.use.view"
     permission-message: "You do not have permission to use that command."
     usage: "/view {inv|ender|extra} or /view {playerName} {inv|ender|extra}"
-  invperm:
-    description: "Lets you control who can view your inventories."
-    permission: "eim.cmd.use.invperm"
-    permission-message: "You do not have permission to use that command."
-    usage: "/invperm {give|take} {view|edit} {inv|ender|extra} {playerName} or /invperm {ownerName} {give|take} {view|edit} {inv|ender|extra} {playerName}"
+# This command isn't ready yet! Use at your own risk!
+#  invperm:
+#    description: "Lets you control who can view your inventories."
+#    permission: "eim.cmd.use.invperm"
+#    permission-message: "You do not have permission to use that command."
+#    usage: "/invperm {give|take} {view|edit} {inv|ender|extra} {playerName} or /invperm {ownerName} {give|take} {view|edit} {inv|ender|extra} {playerName}"
 
 permissions:
   eim.*:

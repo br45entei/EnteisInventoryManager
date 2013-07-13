@@ -8,6 +8,7 @@ import net.milkbowl.vault.permission.Permission;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -18,13 +19,18 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -41,30 +47,32 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	private final MainInvClass plugin = this;
 	public static PluginDescriptionFile pdffile;
 	public static ConsoleCommandSender console;
+	public static Server server = null;
 	public static String pluginName = EPLib.rwhite + "["+ EPLib.green + "Entei's Inventory Manager" + EPLib.rwhite + "] ";
 	public static String dataFolderName = "";
 	public static boolean YamlsAreLoaded = false;
 	public static FileConfiguration config;
 	public static File configFile = null;
 	public static String configFileName = "config.yml";
-	public static ArrayList<Player> playersUsingInventories = new ArrayList<Player>();
-	public static ArrayList<String> playersViewingInventories = new ArrayList<String>();
-	
+	public static boolean updateInvScreensDebounce = false;
+	private static ArrayList<String> playersUsingInvsInfo = new ArrayList<String>();
+
 	// TODO To be loaded from config.yml
-	public static boolean showDebugMsgs;
+	public static boolean showDebugMsgs = false;
 	public static String noPerm = "";
 	public static boolean worldsHaveSeparateInventories = false;
 	public static boolean manageExp = false;
 	public static boolean loadByGameMode = false;
-	
+	static final boolean forceDebugMsgs = false;
 	// TODO Functions
- 	public void LoginListener(MainInvClass JavaPlugin) {
+	public void LoginListener(MainInvClass JavaPlugin) {
 		getServer().getPluginManager().registerEvents(this, plugin);
 	}
+	
 	@Override
 	public void onDisable() {
 		sendConsoleMessage(pluginName + "&eSaving all online players' inventories...");
-		for(Player curPlayer : Bukkit.getServer().getOnlinePlayers()) {
+		for(Player curPlayer : server.getOnlinePlayers()) {
 			if(worldsHaveSeparateInventories) {
 				savePlayerInventory(curPlayer, curPlayer.getWorld());
 			} else {
@@ -75,10 +83,12 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		//saveYamls();
 		sendConsoleMessage(pluginName + "&eVersion " + pdffile.getVersion() + " is now disabled.");
 	}
+	
 	@Override
 	public void onEnable() {pdffile = this.getDescription();
-		Bukkit.getServer().getPluginManager().registerEvents(this, this);
-		console = getServer().getConsoleSender();
+		server = Bukkit.getServer();
+		server.getPluginManager().registerEvents(this, this);
+		console = server.getConsoleSender();
 		File dataFolder = getDataFolder();
 		if(!(dataFolder.exists())) {
 			dataFolder.mkdir();
@@ -96,7 +106,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
-		Inventory blankInv = Bukkit.getServer().createInventory(player, InventoryType.PLAYER);
+		Inventory blankInv = server.createInventory(player, InventoryType.PLAYER);
 		String invFileName = "";
 		String armorFileName = "";
 		String enderFileName = "";
@@ -117,12 +127,15 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			if(wipeInvs) {
 				player.getInventory().setContents(blankInv.getContents());
 				player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
-				player.getEnderChest().setContents(Bukkit.getServer().createInventory(player, InventoryType.ENDER_CHEST).getContents());
+				player.getEnderChest().setContents(server.createInventory(player, InventoryType.ENDER_CHEST).getContents());
 				if(manageExp) {
 					player.setLevel(0);
 					player.setExp(0);
 				}
 			}
+			String invTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Inventory") : "'s Inventory");
+			String enderTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Ender Chest") : "'s Ender Chest");
+			//String extraTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Extra Inventory") : "'s Extra Inventory");
 
 
 
@@ -132,7 +145,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				//Start 'smart' loading
 				if(loadByGameMode == false) {
 					invFileName = (worldName + "" + player.getGameMode().name().toLowerCase() + ".inv"); //Intentional swappage.
-					try{player.getInventory().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player).getContents());
+					try{player.getInventory().setContents(InventoryAPI.setTitle(invTitle, InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player)).getContents());
 						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + invFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
 					} catch (Exception e1) {
 						invFileName = (worldName + ".inv"); //Intentional swappage.
@@ -140,7 +153,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					FileMgmt.WriteToFile(invFileName, InventoryAPI.serializeInventory(player, "inventory"), true, FolderName, dataFolderName);
 				} else {
 					invFileName = (worldName + ".inv"); //Intentional swappage.
-					try{player.getInventory().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player).getContents());
+					try{player.getInventory().setContents(InventoryAPI.setTitle(invTitle, InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player)).getContents());
 						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + invFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
 					} catch (Exception e1) {
 						invFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".inv"); //Intentional swappage.
@@ -187,7 +200,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				//Start 'smart' loading
 				if(loadByGameMode == false) {
 					enderFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".enderInv"); //Intentional swappage
-					try{player.getEnderChest().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), player).getContents());
+					try{player.getEnderChest().setContents(InventoryAPI.setTitle(enderTitle, InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), player)).getContents());
 						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + enderFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
 					} catch (Exception e1) {
 						enderFileName = (worldName + ".enderInv"); //Intentional swappage
@@ -195,7 +208,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					FileMgmt.WriteToFile(enderFileName, InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
 				} else {
 					enderFileName = (worldName + ".enderInv"); //Intentional swappage
-					try{player.getEnderChest().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), player).getContents());
+					try{player.getEnderChest().setContents(InventoryAPI.setTitle(enderTitle, InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), player)).getContents());
 						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + enderFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
 					} catch (Exception e1) {
 						enderFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".enderInv"); //Intentional swappage
@@ -204,9 +217,13 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				}
 				//End smart loading.
 			}
-
-
-
+			if(loadByGameMode) {// Pre-load the extra inventory for the player.
+				getPlayerExtraChest(player, server.getWorld(worldName), GameMode.SURVIVAL);
+				getPlayerExtraChest(player, server.getWorld(worldName), GameMode.CREATIVE);
+				getPlayerExtraChest(player, server.getWorld(worldName), GameMode.ADVENTURE);
+			} else {
+				getPlayerExtraChest(player, server.getWorld(worldName));
+			}
 			if(manageExp) {
 				try{player.setLevel(InventoryAPI.deserializeLevel(FileMgmt.ReadFromFile(expFileName, FolderName, dataFolderName, false)));
 					player.setExp(InventoryAPI.deserializeExp(FileMgmt.ReadFromFile(expFileName, FolderName, dataFolderName, false)));
@@ -239,6 +256,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			}
 		} catch (Exception e) {e.printStackTrace();/*savePlayerInventory(player, world);*/}
 	}
+	
 	public static void savePlayerInventory(Player player, World world, GameMode gm) {
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
@@ -264,6 +282,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		FileMgmt.WriteToFile(enderFileName, InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
 		if(manageExp) {FileMgmt.WriteToFile(expFileName, InventoryAPI.serializeExperience(player), true, FolderName, dataFolderName);} else {EPLib.sendOneTimeMessage(pluginName + "&eThe var \"&fmanageExp&e\" was set to false in the config.yml; not managing player experience levels.", "console");}
 	}
+	
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerJoinEvent(PlayerJoinEvent evt) {
 		Player newPlayer = evt.getPlayer();
@@ -274,6 +293,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			updatePlayerInventory(newPlayer, null, newPlayer.getWorld(), "load");
 		}
 	}
+	
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerQuit(PlayerQuitEvent evt) {
 		Player oldPlayer = evt.getPlayer();
@@ -284,151 +304,83 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			updatePlayerInventory(oldPlayer, oldPlayer.getWorld(), null, "save");
 		}
 	}
+	
 	@EventHandler(priority=EventPriority.HIGHEST)
 	public void onPlayerGameModeChangeEvent(PlayerGameModeChangeEvent evt) {
-		Player player = evt.getPlayer();
+		final Player player = evt.getPlayer();
 		GameMode oldGameMode = player.getGameMode();
-		GameMode newGameMode = evt.getNewGameMode();
+		final GameMode newGameMode = evt.getNewGameMode();
 		if(evt.isCancelled() == false) {
 			savePlayerInventory(player, player.getWorld(), oldGameMode);
-			loadPlayerInventory(player, player.getWorld(), newGameMode, true);
+			server.getScheduler().runTaskLater(plugin, new Runnable() {
+				@Override
+				public void run() {
+					loadPlayerInventory(player, player.getWorld(), newGameMode, true);
+					sendMessage(player, pluginName + "&aYour inventory has been updated to your current gamemode!");
+				}
+			}, 2);//Two ticks later(To let the player's inventory get saved before wiping it)!
 		}
 	}
+	
 	/**@param evt PlayerChangedWorldEvent
 	 */
 	@EventHandler(priority=EventPriority.LOWEST) 
 	private void onPlayerChangedWorldEvent(PlayerChangedWorldEvent evt) {
 		Player player = evt.getPlayer();
-		World newWorld = player.getWorld();
+		World newWorld = (worldsHaveSeparateInventories ? player.getWorld() : getWhatWorldToUseFromWorld(player.getWorld()));
 		World oldWorld = evt.getFrom();
 		if(worldsHaveSeparateInventories) {
 			//Save the old inventory to disk
-			savePlayerInventory(player, oldWorld);
+/**//**//**/savePlayerInventory(player, oldWorld);
 			//Load the new inventory from disk
-			loadPlayerInventory(player, newWorld, false);
+/**//**//**/loadPlayerInventory(player, newWorld, false);
 		} else {
 			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + player.getName() + "&e\"'s inventory for world \"&a" + player.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
 			updatePlayerInventory(player, oldWorld, newWorld, "both");
 		}
 	}
+	
 	/**@param player Player
 	 * @param oldWorld World
 	 * @param newWorld World
 	 * @param loadSaveOrBoth Boolean 
 	 */
 	public void updatePlayerInventory(Player player, World oldWorld, World newWorld, String loadSaveOrBoth) {
-		String primaryWorldName = "";
-		boolean savedToWorld = false;
-		boolean loadedFromWorld = false;
 		String oldWorldName = "";
-		if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {oldWorldName = oldWorld.getName();}
-		boolean Continue = false;
-		int numOfLists = 0;
-		try{numOfLists = config.getInt("numberOfLists");
-			Continue = true;
-		} catch (Exception e) {
-			Continue = false;
-			e.printStackTrace();
+		if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {
+			oldWorldName = oldWorld.getName();
 		}
-		if(Continue) {
-			EPLib.showDebugMsg(pluginName + "&a'WorldTo': \"&6" + player.getWorld().getName() + "&a\"", showDebugMsgs);
-			EPLib.showDebugMsg(pluginName + "&a'WorldFrom': \"&6" + oldWorldName + "&a\"", showDebugMsgs);
-			if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {
-				for(int num = 1; num <= numOfLists; num++) {
-					EPLib.showDebugMsg(pluginName + "&2SAVING: &aDebug: num = " + num, showDebugMsgs);
-					String worldNameList = config.getString("list_" + num);
-					if(worldNameList != null) {
-						if(worldNameList.split("\\|").length >= 1) {
-							boolean firstRunIsOver = false;
-							for(String curWorldName : worldNameList.split("\\|")) {
-								if(savedToWorld) {
-									EPLib.showDebugMsg(pluginName + "&2SAVING:&a savedToWorld = true", showDebugMsgs);
-									break;
-								}
-								EPLib.showDebugMsg(pluginName + "&2SAVING:&r &a'curWorldName' = \"&6" + curWorldName + "&a\"", showDebugMsgs);
-								if(curWorldName.equals("") == false) {
-									if(firstRunIsOver == false) {
-										if(Bukkit.getWorld(curWorldName) != null) {
-											primaryWorldName = curWorldName;
-											firstRunIsOver = true;
-										}
-									}
-									if(oldWorld.getName().equalsIgnoreCase(curWorldName) || oldWorld.getName().equalsIgnoreCase(primaryWorldName)) {
-										savePlayerInventory(player, Bukkit.getServer().getWorld(primaryWorldName));
-										sendConsoleMessage(pluginName + (primaryWorldName.equalsIgnoreCase(oldWorld.getName()) ? "&2SAVING: &aSaved player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + primaryWorldName + "&a\"." : "&2SAVING: &aSaved player \"&f" + player.getName() + "&a\"'s inventory to world: \"&6" + primaryWorldName + "&a\" instead of saving to world \"&6" + oldWorld.getName() + "&a\"."));
-										savedToWorld = true;
-									}
-								}
-							}
-							if(savedToWorld == true) {
-								break;
-							}
-						} else {
-							EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
-						}
-					} else {
-						EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
-					}
-				}
-			}// else {print("This is a player join event, isn't it?");}
-			if(loadSaveOrBoth.equalsIgnoreCase("load") || loadSaveOrBoth.equalsIgnoreCase("both")) {
-				for(int num = 1; num <= numOfLists; num++) {
-					EPLib.showDebugMsg(pluginName + "&5&nLOADING:&r &aDebug: num = " + num, showDebugMsgs);
-					String worldNameList = config.getString("list_" + num);
-					if(worldNameList != null) {
-						if(worldNameList.split("\\|").length >= 1) {
-							boolean firstRunIsOver = false;
-							for(String curWorldName : worldNameList.split("\\|")) {
-								if(loadedFromWorld) {
-									EPLib.showDebugMsg(pluginName + "&5&nLOADING:&r&a loadedFromWorld = true", showDebugMsgs);
-									break;
-								}
-								EPLib.showDebugMsg(pluginName + "&5&nLOADING:&r &a'curWorldName' = \"&6" + curWorldName + "&a\"", showDebugMsgs);
-								if(curWorldName.equals("") == false) {
-									if(firstRunIsOver == false) {
-										if(Bukkit.getWorld(curWorldName) != null) {
-											primaryWorldName = curWorldName;
-											firstRunIsOver = true;
-										}
-									}
-									if(newWorld.getName().equalsIgnoreCase(curWorldName) || newWorld.getName().equalsIgnoreCase(primaryWorldName)) {
-										loadPlayerInventory(player, Bukkit.getServer().getWorld(primaryWorldName), true);
-										if(primaryWorldName.equalsIgnoreCase(newWorld.getName()) == false) {
-											sendConsoleMessage(pluginName + "&5&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory from world: \"&6" + primaryWorldName + "&a\" instead of loading from world \"&6" + newWorld.getName() + "&a\".");
-										} else {
-											sendConsoleMessage(pluginName + "&5&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + primaryWorldName + "&a\".");
-										}
-										loadedFromWorld = true;
-									} else {
-										//sendConsoleMessage(pluginName + "&5&nLOADING:&r &enewWorld: \"&6" + newWorld.getName() + "&e\"; curWorldName: \"&6" + curWorldName + "&e\"");
-									}
-								}
-							}
-							if(loadedFromWorld == true) {
-								break;
-							}
-						} else {
-							EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
-						}
-					} else {
-						EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
-					}
-				}
-			}// else {print("This is a player quit event, isn't it?");}
+		EPLib.showDebugMsg(pluginName + "&a'WorldTo': \"&6" + player.getWorld().getName() + "&a\"", showDebugMsgs);
+		EPLib.showDebugMsg(pluginName + "&a'WorldFrom': \"&6" + oldWorldName + "&a\"", showDebugMsgs);
+		if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {
+			World worldToSaveTo = getWhatWorldToUseFromWorld(oldWorld);
+/**//**//**/savePlayerInventory(player, worldToSaveTo);
+			sendConsoleMessage(pluginName + (worldToSaveTo.getName().equalsIgnoreCase(oldWorld.getName()) ? "&1&nSAVING:&r &aSaved player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + worldToSaveTo.getName() + "&a\"." : "&1&nSAVING:&r &aSaved player \"&f" + player.getName() + "&a\"'s inventory to world: \"&6" + worldToSaveTo.getName() + "&a\" instead of saving to world \"&6" + oldWorld.getName() + "&a\"."));
 		} else {
-			EPLib.unSpecifiedVarWarning("numberOfLists", configFileName, pluginName);
+			sendDebugMsg("&aThis is a player join event, isn't it?");
+		}
+		if(loadSaveOrBoth.equalsIgnoreCase("load") || loadSaveOrBoth.equalsIgnoreCase("both")) {
+			World worldToLoadFrom = getWhatWorldToUseFromWorld(newWorld);
+/**//**//**/loadPlayerInventory(player, worldToLoadFrom, true);
+			sendConsoleMessage(pluginName + (worldToLoadFrom.getName().equalsIgnoreCase(newWorld.getName()) == false ? "&1&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory from world: \"&6" + worldToLoadFrom.getName() + "&a\" instead of loading from world \"&6" + newWorld.getName() + "&a\"." : "&1&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + worldToLoadFrom.getName() + "&a\"."));
+		} else {
+			sendDebugMsg("&aThis is a player quit event, isn't it?");
 		}
 	}
+	
 	static String sendConsoleMessage(String msg) {
 		return EPLib.sendConsoleMessage(msg);
 	}
-	private static String sendMessage(CommandSender target, String msg) {
+	
+	static String sendMessage(CommandSender target, String msg) {
 		return EPLib.sendMessage(target,  msg);
 	}
-	private static String sendMessage(Player target, String msg) {
+	
+	static String sendMessage(Player target, String msg) {
 		return EPLib.sendMessage(target, msg);
 	}
-	public boolean LoadConfig() {
+	
+	private boolean LoadConfig() {
 		this.saveDefaultConfig();
 		configFile = new File(dataFolderName, configFileName);
 		config = new YamlConfiguration();
@@ -440,6 +392,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		} else {sendConsoleMessage(pluginName + "&cError: Some YAML Files failed to load successfully! Check the server log or \"" + dataFolderName + "\\crash-reports.txt\" to solve the problem.");}
 		return YamlsAreLoaded;
 	}
+	
 	private void loadResourceFiles() throws Exception {
 		if(!configFile.exists()) {
 			configFile.getParentFile().mkdirs();
@@ -450,7 +403,8 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			FileMgmt.copy(getResource(NEWCONFIGFileName), NEWCONFIGFile, dataFolderName);
 		}*/
 	}
-	public boolean reloadFiles(boolean ShowStatus) {
+	
+	private boolean reloadFiles(boolean ShowStatus) {
 		YamlsAreLoaded = false;
 		boolean loadedAllVars = false;
 		String unloadedFiles = "\"";
@@ -478,7 +432,8 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			return false;
 		}
 	}
-	public boolean saveYamls() {
+	
+	private boolean saveYamls() {
 		String unSavedFiles = "\"";
 		//The following tries to save the FileConfigurations to their Files:
 		Exception e1 = null;try{config.save(configFile);} catch (Exception e) {e1 = e;unSavedFiles = unSavedFiles + configFileName + "\" ";}
@@ -496,8 +451,9 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			return false;
 		}
 	}
+	
 	@SuppressWarnings("boxing")
-	public static boolean loadYamlVariables() {
+	private static boolean loadYamlVariables() {
 		boolean loadedAllVars = true;
 		try{showDebugMsgs = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("showDebugMsgs")))) == true;
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("showDebugMsgs", "config.yml", pluginName);}
@@ -514,6 +470,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		
 		return loadedAllVars;
 	}
+	
 	@Override
 	public boolean onCommand(final CommandSender sender, final Command cmd, final String command, final String[] args) {
 		String strArgs = "";
@@ -523,7 +480,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			do{strArgs = strArgs.concat(args[x] + " "); x++; }while( x < args.length );
 		}
 		strArgs = strArgs.trim();
-		Player user = Bukkit.getServer().getPlayer(sender.getName());
+		Player user = server.getPlayer(sender.getName());
 		String userName = sender.getName();
 		if(user != null) {
 			userName = user.getDisplayName();
@@ -602,211 +559,125 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			}
 			EPLib.sendMessage(sender, pluginName + "&eUsage: \"/" + command + " info\" or use an admin command.");
 			return true;
-		} else if(command.equalsIgnoreCase("view")) {// TODO Re-do this whole section, be sure to leave the non-gamemode section(s) alone, as they are good as-is.(make sure of that, though...)
+		} else if(command.equalsIgnoreCase("view")) {// TODO /view
 			if(user != null) {
-				if(loadByGameMode == false) {
-					if(args.length == 1) {
-						if(args[0].equals("inv")) {
-							user.openInventory(user.getInventory());
-						} else if(args[0].equalsIgnoreCase("ender") || args[0].equalsIgnoreCase("enderchest")) {
-							user.openInventory(user.getEnderChest());
-						} else if(args[0].equalsIgnoreCase("extra")) {
-							user.openInventory(getPlayerExtraChest(user));
-						} else {
-							sendMessage(sender, pluginName + "&eUsage: /" + command + " {inv|ender|extra} or /" + command + " {playerName} {inv|ender|extra}");
-						}
-					} else if(args.length == 2) {
-						Player target = Bukkit.getServer().getPlayer(args[0]);
-						if(target != null) {
-							if(args[1].equalsIgnoreCase("inv")) {
-								if(user.hasPermission("eim.*") || user.hasPermission("eim.view.inv.*") || user.hasPermission("eim.view.inv." + target.getName())) {
-									user.openInventory(target.getInventory());
-								} else {
-									sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their inventory.");
-									sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your inventory.");
-								}
-							} else if(args[1].equalsIgnoreCase("ender") || args[1].equalsIgnoreCase("enderchest")) {
-								if(user.hasPermission("eim.*") || user.hasPermission("eim.view.ender.*") || user.hasPermission("eim.view.ender." + target.getName())) {
-									user.openInventory(target.getEnderChest());
-								} else {
-									sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their ender chest.");
-									sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your ender chest.");
-								}
-							} else if(args[1].equalsIgnoreCase("extra")) {
-								if(user.hasPermission("eim.*") || user.hasPermission("eim.view.extra.*") || user.hasPermission("eim.view.extra." + target.getName())) {
-									user.openInventory(getPlayerExtraChest(target));
-								} else {
-									sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their extra inventory.");
-									sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your extra chest.");
-								}
-							} else {
-								sendMessage(sender, pluginName + "&eUsage: /" + command + " {inv|ender|extra} or /" + command + " {playerName} {inv|ender|extra}");
-							}
-						} else {
-							sendMessage(sender, pluginName + "&eThe player \"&f" + args[0] + "&e\" is not online or does not exist!");
-						}
-					} else {
-						sendMessage(sender, pluginName + "&eUsage: /" + command + " {inv|ender|extra} or /" + command + " {playerName} {inv|ender|extra}");
-					}
+				if(user.hasPermission("eim.cmd.use.view") == false && user.hasPermission("eim.*") == false) {
+					sendMessage(user, pluginName + noPerm);
 					return true;
 				}
-				if(loadByGameMode) {
-					if(args.length == 3) {
-						Player target = Bukkit.getServer().getPlayer(args[0]);
-						if(target != null) {
-							String gamemode = (args[1].equalsIgnoreCase("survival") || args[1].equals("0") ? ".survival" : ((args[1].equalsIgnoreCase("creative") || args[1].equals("1") ? ".creative" : ((args[1].equalsIgnoreCase("adventure") || args[1].equals("2") ? ".adventure" : "INVALID")))));
-							if(gamemode.equals("INVALID")) {
-								sendMessage(sender, pluginName + "&e\"&f" + args[1] + "&r&e\" is not a valid gamemode. You can enter 0-2 or the word, without spaces. Example: \"creative\"");
-								sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
-								return true;
-							}
-							if(args[2].equalsIgnoreCase("inv")) {
-								if(target.equals(user) == false) {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.inv.*") || user.hasPermission("eim.view.inv" + gamemode + "." + target.getName())) {
-										user.openInventory(target.getInventory());
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their " + gamemode.replace(".", "") + " inventory.");
-										sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your inventory.");
-									}
-								} else {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.inv.*") || user.hasPermission("eim.view.inv" + gamemode)) {
-										user.openInventory(user.getInventory());
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but you don't have permission to view your " + gamemode.replace(".", "") + " inventory when you aren't in &c" + gamemode.replace(".", "") + "&f&e mode.");
-									}
-								}
-							} else if(args[2].equalsIgnoreCase("ender") || args[2].equalsIgnoreCase("enderchest")) {
-								if(target.equals(user) == false) {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.ender.*") || user.hasPermission("eim.view.ender" + gamemode + "." + target.getName())) {
-										user.openInventory(target.getEnderChest());
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their " + gamemode.replace(".", "") + " ender chest.");
-										sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your ender chest.");
-									}
-								} else {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.ender.*") || user.hasPermission("eim.view.ender" + gamemode)) {
-										user.openInventory(user.getInventory());
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but you don't have permission to view your " + gamemode.replace(".", "") + " ender chest when you aren't in &c" + gamemode.replace(".", "") + "&f&e mode.");
-									}
-								}
-							} else if(args[2].equalsIgnoreCase("extra")) {
-								if(target.equals(user) == false) {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.extra.*") || user.hasPermission("eim.view.extra" + gamemode + "." + target.getName())) {
-										user.openInventory(getPlayerExtraChest(target, GameMode.getByValue(gamemode.equalsIgnoreCase(".survival") ? 0 : (gamemode.equalsIgnoreCase(".creative") ? 1 : 2))));
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but &f" + target.getDisplayName() + "&r&e hasn't given you permission to view their extra " + gamemode.replace(".", "") + " inventory.");
-										sendMessage(target, pluginName + "&f" + userName + "&r&e just tried to view your extra chest.");
-									}
-								} else {
-									if(user.hasPermission("eim.*") || user.hasPermission("eim.view.extra.*") || user.hasPermission("eim.view.extra" + gamemode)) {
-										user.openInventory(user.getInventory());
-									} else {
-										sendMessage(sender, pluginName + "&eSorry, but you don't have permission to view your extra " + gamemode.replace(".", "") + " chest inventory when you aren't in &c" + gamemode.replace(".", "") + "&f&e mode.");
-									}
-								}
-							} else {
-								sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
-							}
-							return true;
-						}
-						sendMessage(sender, pluginName + "&eThe player \"&f" + args[0] + "&e\" is not online or does not exist!");
+				String invToLoad = null;
+				Player target = null;
+				GameMode gm = null;
+				World targetWorld = null;
+				if(args.length == 1) {
+					invToLoad = args[0];
+					target = user;
+					gm = user.getGameMode();
+					targetWorld = user.getWorld();
+				} else if(args.length == 2) {// TODO /view {playerName|worldName|gamemode} {inv|ender|extra}
+					invToLoad = args[1];
+					target = server.getPlayer(args[0]);
+					gm = GameMode.getByValue(args[0].equalsIgnoreCase("survival") || args[0].equals("0") ? 0 : (args[0].equalsIgnoreCase("creative") || args[0].equals("1") ? 1 : (args[0].equalsIgnoreCase("adventure") || args[0].equals("2") ? 2 : 42)));
+					targetWorld = server.getWorld(args[0]);
+					if(target == null && gm == null && targetWorld == null) {
+						sendMessage(user, pluginName + "&eThe following argument that you typed is not a valid playerName, worldName, or gameMode: \"&f" + args[0] + "&r&e\".");
+						sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName|worldName|gamemode} {inv|ender|extra}");
 						return true;
-					} else if(args.length == 2) {
-						String gamemode = (args[0].equalsIgnoreCase("survival") || args[0].equals("0") ? "survival" : ((args[0].equalsIgnoreCase("creative") || args[0].equals("1") ? "creative" : ((args[0].equalsIgnoreCase("adventure") || args[0].equals("2") ? "adventure" : "INVALID")))));
-						if(gamemode.equals("INVALID")) {
-							sendMessage(sender, pluginName + "&e\"&f" + args[1] + "&r&e\" is not a valid gamemode. You can enter 0-2 or the word, without spaces. Example: \"creative\"");
-							sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
+					}
+				} else if(args.length == 3) {
+					invToLoad = args[2];
+					// TODO /view {worldName} {gameMode} {inv|ender|extra}
+					gm = GameMode.getByValue(args[1].equalsIgnoreCase("survival") || args[1].equals("0") ? 0 : (args[1].equalsIgnoreCase("creative") || args[1].equals("1") ? 1 : (args[1].equalsIgnoreCase("adventure") || args[1].equals("2") ? 2 : 42)));
+					targetWorld = server.getWorld(args[0]);
+					if(targetWorld != null && gm != null) {
+						target = user;
+					}
+					if(server.getPlayer(args[0]) != null) {// TODO /view {playerName} {worldName|gamemode} {inv|ender|extra}
+						target = server.getPlayer(args[0]);
+						gm = GameMode.getByValue(args[1].equalsIgnoreCase("survival") || args[1].equals("0") ? 0 : (args[1].equalsIgnoreCase("creative") || args[1].equals("1") ? 1 : (args[1].equalsIgnoreCase("adventure") || args[1].equals("2") ? 2 : 42)));
+						targetWorld = server.getWorld(args[1]);
+						if(gm == null && targetWorld == null) {
+							/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eThe following argument that you entered, \"&f" + args[1] + "&r&e\", is not a valid gameMode or a valid worldName."/*)*/);
+							/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName} {worldName|gamemode} {inv|ender|extra} or /" + command + " {worldName} {gameMode} {inv|ender|extra}"/*)*/);
 							return true;
 						}
-						if(user.getGameMode().name().equalsIgnoreCase(gamemode)) {
-							if(args[1].equalsIgnoreCase("inv")) {
-								user.openInventory(user.getInventory());
-							} else if(args[1].equalsIgnoreCase("ender") || args[1].equalsIgnoreCase("enderchest")) {
-								user.openInventory(user.getEnderChest());
-							} else if(args[1].equalsIgnoreCase("extra")) {
-								user.openInventory(getPlayerExtraChest(user, GameMode.getByValue(gamemode.equalsIgnoreCase("survival") ? 0 : (gamemode.equalsIgnoreCase("creative") ? 1 : 2))));
-							} else {
-								sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
-							}
-						} else {
-							Inventory invToView = null;
-							String worldName = user.getWorld().getName().toLowerCase().replaceAll(" ", "_");
-							String playerName = user.getName();
-							String FolderName = "Inventories" + File.separatorChar + playerName;
-							String invFileName = (worldName + "." + gamemode + ".inv");
-							//String armorFileName = (worldName + "." + gamemode + ".armorInv");
-							String enderFileName = (worldName + "." + gamemode + ".enderInv");
-							//String expFileName = (worldName + "." + gamemode + ".exp");
-							if(args[1].equalsIgnoreCase("inv")) {
-								try{
-									invToView = InventoryAPI.setTitle(user.getName() + "'s " + EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Inventory", InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), user));
-								} catch (Exception e) {
-									e.printStackTrace();
-								}
-							} else if(args[1].equalsIgnoreCase("ender") || args[1].equalsIgnoreCase("enderchest")) {
-								try{
-									invToView = InventoryAPI.setTitle(user.getName() + "'s " + EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Ender Chest", InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), user));
-								} catch (Exception e) {
-									e.printStackTrace();
-								}
-								
-							} else if(args[1].equalsIgnoreCase("extra")) {
-								try{
-									invToView = InventoryAPI.setTitle(user.getName() + "'s " + EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Extra Inventory", getPlayerExtraChest(user, GameMode.getByValue(gamemode.equalsIgnoreCase("survival") ? 0 : (gamemode.equalsIgnoreCase("creative") ? 1 : 2))));
-								} catch (Exception e) {
-									e.printStackTrace();
-								}
-							} else {
-								sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
-								return true;
-							}
-							if(invToView != null) {
-								if(user.hasPermission("eim.view.gamemode." + gamemode + "." + args[1].toLowerCase())) {
-									//final String invTitle = invToView.getTitle();
-									playersViewingInventories.add(user.getName());
-									user.openInventory(invToView);
-								}
-							} else {
-								sendMessage(user, pluginName + "&eUnable to open your &f" + gamemode + "&e inventory. Have you been in " + gamemode + " mode for this world yet?");
-								return true;
-							}
-						}
-					} else if(args.length == 1) {
-						if(args[0].equalsIgnoreCase("inv")) {
-							user.openInventory(user.getInventory());
-						} else if(args[0].equalsIgnoreCase("ender") || args[0].equalsIgnoreCase("enderchest")) {
-							user.openInventory(user.getEnderChest());
-						} else if(args[0].equalsIgnoreCase("extra")) {
-							user.openInventory(getPlayerExtraChest(user, user.getGameMode()));
-						} else {
-							sendMessage(sender, pluginName + "&eUsage: /" + command + " {survival|creative|adventure} {inv|ender|extra} or /" + command + " {playerName} {survival|creative|adventure} {inv|ender|extra}");
-						}
-					} else {
-						sendMessage(sender, pluginName + "&eUsage: /" + command + " {inv|ender|extra} or /" + command + " {playerName} {inv|ender|extra}");
+						if(gm == null) {gm = (target != null ? target.getGameMode() : null);}
+						if(targetWorld == null) {targetWorld = (target != null ? target.getWorld() : null);}
+					} else if(targetWorld == null) {// TODO /view {worldName} {gamemode} {inv|ender|extra}
+						/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eThe following argument that you entered, \"&f" + args[0] + "&r&e\", is not a valid worldName.")/*)*/;
+						/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eUsage: /" + command + " {worldName} {gamemode} {inv|ender|extra}")/*)*/;
+						return true;
+					} else if(gm == null) {// TODO /view {worldName} {gamemode} {inv|ender|extra}
+						/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eThe following argument that you entered, \"&f" + args[1] + "&r&e\", is not a valid gameMode.")/*)*/;
+						/*sendConsoleMessage(*/sendMessage(user, pluginName + "&eUsage: /" + command + " {worldName} {gamemode} {inv|ender|extra}")/*)*/;
+						return true;
 					}
+					if(target == null && gm == null && targetWorld == null) {
+						sendMessage(user, pluginName + "&eThe following argument that you typed is not a valid playerName, worldName, or gameMode: \"&f" + args[0] + "&r&e\".");
+						sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName|worldName|gamemode} {inv|ender|extra}");
+						return true;
+					}
+				} else if(args.length == 4) {// TODO /view {playerName} {worldName} {gamemode} {inv|ender|extra}
+					invToLoad = args[3];
+					target = server.getPlayer(args[0]);
+					gm = GameMode.getByValue(args[1].equalsIgnoreCase("survival") || args[1].equals("0") ? 0 : (args[1].equalsIgnoreCase("creative") || args[1].equals("1") ? 1 : (args[1].equalsIgnoreCase("adventure") || args[1].equals("2") ? 2 : 42)));
+					targetWorld = server.getWorld(args[2]);
+					if(target == null) {
+						sendMessage(user, pluginName + "&eThe following argument that you typed is not a valid playerName: \"&f" + args[0] + "&r&e\".");
+						sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName} {worldName} {gamemode} {inv|ender|extra}");
+						return true;
+					} else if(gm == null) {
+						sendMessage(user, pluginName + "&eThe following argument that you typed is not a valid gameMode: \"&f" + args[1] + "&r&e\".");
+						sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName} {worldName} {gamemode} {inv|ender|extra}");
+						return true;
+					} else if(targetWorld == null) {
+						sendMessage(user, pluginName + "&eThe following argument that you typed is not a valid worldName: \"&f" + args[2] + "&r&e\".");
+						sendMessage(user, pluginName + "&eUsage: /" + command + " {playerName} {worldName} {gamemode} {inv|ender|extra}");
+						return true;
+					}
+				} else {
+					sendMessage(user, pluginName + "&eThe arguments that you entered were not compatable for this command. Here is a list of all possible usages:");
+					showUsageForCmd("view", "all", user);
+					return true;
 				}
-				return true;
+				if(target == null) {target = user;}
+				if(gm == null) {gm = target.getGameMode();}
+				if(targetWorld == null) {targetWorld = target.getWorld();}
+				if(invToLoad.equalsIgnoreCase("inv")) {
+					if(user.getName().equals(target.getName()) && user.getGameMode().equals(gm)) {
+						sendMessage(user, pluginName + "&eYou can view this inventory by pressing 'e', or whatever your inventory button is set to!");
+						return true;
+					}
+					String success = openPlayerInventory(user, target, gm, targetWorld, "inv");
+					if(success.equalsIgnoreCase("noperm")) {
+						sendMessage(user, pluginName + "&eIt appears you do not have permission to open " + (user.getName().equals(target.getName()) ? " your" : " &f" + target.getDisplayName() + "&r&e's") + (loadByGameMode ? " &f" + gm.name().toLowerCase() + "&e" : "") + " inventory.");
+					}
+					return true;
+				} else if(invToLoad.equalsIgnoreCase("ender") || invToLoad.equalsIgnoreCase("enderchest")) {
+					String success = openPlayerInventory(user, target, gm, targetWorld, "ender");
+					if(success.equalsIgnoreCase("noperm")) {
+						sendMessage(user, pluginName + "&eIt appears you do not have permission to open " + (user.getName().equals(target.getName()) ? " your" : " &f" + target.getDisplayName() + "&r&e's") + (loadByGameMode ? " &f" + gm.name().toLowerCase() + "&e" : "") + " ender chest.");
+					}
+					return true;
+				} else if(invToLoad.equalsIgnoreCase("extra")) {
+					String success = openPlayerInventory(user, target, gm, targetWorld, "extra");
+					if(success.equalsIgnoreCase("noperm")) {
+						sendMessage(user, pluginName + "&eIt appears you do not have permission to open " + (user.getName().equals(target.getName()) ? " your extra" : " &f" + target.getDisplayName() + "&r&e's extra") + (loadByGameMode ? " &f" + gm.name().toLowerCase() + "&e" : "") + " chest.");
+					}
+					return true;
+				} else {
+					sendMessage(sender, pluginName + "&eThe argument you entered, \"&f" + invToLoad + "&r&e\", must be one of the following: &finv ender enderchest extra&e.");
+					return true;
+				}
 			}
-			// TODO /view for console
-			
-			
-			
-			
-			
-			sendMessage(sender, pluginName + "&e/" + command + " is used to display a player's inventory. When used by the console, it is used to display the targeted players' inventory on their screen.");
-			
-			
-			
-			
-			
-			
+			// /view for console
+			sendMessage(sender, pluginName + "&e/" + command + " is used to display a player's inventory. When used by the console, it is used to display the targeted players' inventory on their screen. This command is, however, currently NYI for console use.(Not Yet Implemented)");
 			return true;
 		} else if(command.equalsIgnoreCase("invperm")) {
 			RegisteredServiceProvider<Permission> permProvider = null;
-			Permission permission = null;
+			@SuppressWarnings("unused")Permission permission = null;
 			if(EPLib.vaultIsAvailable) {
-				permProvider = Bukkit.getServer().getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
+				permProvider = server.getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
 				if(permProvider != null) {
 					permission = permProvider.getProvider();
 					EPLib.showDebugMsg(pluginName + "&aInternal variable \"permission\" is not null!", showDebugMsgs);
@@ -820,390 +691,708 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			}
 			if(user != null) {
 				//Used by Player
-				if(args.length == 4) {
-					//if(args[0].equalsIgnoreCase("give")) {
-					if(args[1].equalsIgnoreCase("view") || args[1].equalsIgnoreCase("edit")) {
-						if(args[2].equalsIgnoreCase("inv") || args[2].equalsIgnoreCase("ender") || args[2].equalsIgnoreCase("enderchest") || args[2].equalsIgnoreCase("extra")) {
-							Player target = Bukkit.getServer().getPlayer(args[3]);
-							if(target != null) {
-								if(args[0].equalsIgnoreCase("give")) {
-									permission.playerAdd(Bukkit.getServer().getPlayer(sender.getName()).getWorld(), target.getName(), "eim." + (args[1].equalsIgnoreCase("view") ? "view" : "edit") + "." + (args[2].equalsIgnoreCase("inv") ? "inv" : ((args[2].equalsIgnoreCase("ender") || args[2].equalsIgnoreCase("enderchest")) ? "ender" : "extra")) + "." + sender.getName());
-								} else if(args[0].equalsIgnoreCase("take")) {
-									permission.playerRemove(Bukkit.getServer().getPlayer(sender.getName()).getWorld(), target.getName(), "eim." + (args[1].equalsIgnoreCase("view") ? "view" : "edit") + "." + (args[2].equalsIgnoreCase("inv") ? "inv" : ((args[2].equalsIgnoreCase("ender") || args[2].equalsIgnoreCase("enderchest")) ? "ender" : "extra")) + "." + sender.getName());
-								} else {
-									sendInvPermUsage(sender, command);
-								}
-								return true;
-							}
-							sendNotOnlineMessage(sender, args[3]);
-							return true;
-						}
-						sendInvPermUsage(sender, command);
-						return true;
-					}
-					sendInvPermUsage(sender, command);
-					return true;
-				}
-				sendInvPermUsage(sender, command);
+				//MAKE THIS!
 				return true;
 			}
 			//Used by Console
-			if(args.length == 5) {
-				Player owner = Bukkit.getServer().getPlayer(args[0]);
-				if(owner != null) {
-					if(args[2].equalsIgnoreCase("view") || args[2].equalsIgnoreCase("edit")) {
-						if(args[3].equalsIgnoreCase("inv") || args[3].equalsIgnoreCase("ender") || args[3].equalsIgnoreCase("enderchest") || args[3].equalsIgnoreCase("extra")) {
-							Player target = Bukkit.getServer().getPlayer(args[4]);
-							if(target != null) {
-								String Perm = "eim." + (args[2].equalsIgnoreCase("view") ? "view" : "edit") + "." + (args[3].equalsIgnoreCase("inv") ? "inv" : ((args[3].equalsIgnoreCase("ender") || args[3].equalsIgnoreCase("enderchest")) ? "ender" : "extra")) + "." + sender.getName();
-								String targetMsg = "&f" + sender.getName() + "&b has just " + (args[1].equalsIgnoreCase("give") ? "given you permission to " : "taken away your permission to ") + (args[2].equalsIgnoreCase("view") ? "view" : "edit") + " &f" + owner.getName() + "&b's " + (args[3].equalsIgnoreCase("inv") ? "inventory" : ((args[3].equalsIgnoreCase("ender") || args[3].equalsIgnoreCase("enderchest")) ? "ender chest" : "extra inventory")) + "!";
-								String senderMessage = "&bYou have just " + (args[1].equalsIgnoreCase("give") ? "given &f" + target.getName() + "&b permission to " : "taken away &f" + target.getName() + "&b's permission to ") + (args[2].equalsIgnoreCase("view") ? "view" : "edit") + " &f" + owner.getName() + "&b's " + (args[3].equalsIgnoreCase("inv") ? "inventory" : ((args[3].equalsIgnoreCase("ender") || args[3].equalsIgnoreCase("enderchest")) ? "ender chest" : "extra inventory")) + "!";
-								String ownerMessage = "&f" + (sender.getName().equals(EPLib.console.getName()) ? EPLib.consoleSayFormat : "&e" + sender.getName().trim() + "&r ") + "&bhas just " + (args[1].equalsIgnoreCase("give") ? "given &f" + target.getName() + "&b permission to " : "taken away &f" + target.getName() + "&b's permission to ") + (args[2].equalsIgnoreCase("view") ? "view" : "edit") + " your " + (args[3].equalsIgnoreCase("inv") ? "inventory" : ((args[3].equalsIgnoreCase("ender") || args[3].equalsIgnoreCase("enderchest")) ? "ender chest" : "extra inventory")) + "!";
-								if(args[1].equalsIgnoreCase("give")) {
-									permission.playerAdd(Bukkit.getServer().getPlayer(sender.getName()).getWorld(), target.getName(), Perm);
-									sendMessage(target, pluginName + targetMsg);
-									sendMessage(owner, pluginName + ownerMessage);
-									sendMessage(sender, pluginName + senderMessage);
-								} else if(args[1].equalsIgnoreCase("take")) {
-									permission.playerRemove(Bukkit.getServer().getPlayer(sender.getName()).getWorld(), target.getName(), Perm);
-									sendMessage(target, pluginName + targetMsg);
-									sendMessage(owner, pluginName + ownerMessage);
-									sendMessage(sender, pluginName + senderMessage);
-								} else {
-									sendInvPermUsage(sender, command);
-								}
-								return true;
-							}
-							sendNotOnlineMessage(sender, args[4]);
-							return true;
-						}
-						sendInvPermUsage(sender, command);
-						return true;
-					}
-					sendInvPermUsage(sender, command);
-					return true;
-				}
-				sendNotOnlineMessage(sender, args[0]);
-				return true;
-			}
+			//MAKE THIS!
 			sendInvPermUsageForConsole(sender, command);
 			return true;
 		} else {
 			return false;
 		}
 	}
+	
+	void showUsageForCmd(String cmd, String mode, CommandSender target) {
+		if(cmd.equalsIgnoreCase("view")) {
+			if(mode.equalsIgnoreCase("all")) {
+				sendMessage(target, pluginName + "&e/" + cmd + " &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &6{gamemode} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &d{worldName} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &d{worldName} &6{gamemode} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &2{playerName} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &2{playerName} &6{gamemode} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &2{playerName} &d{worldName} &3{inv|ender|extra}");
+				sendMessage(target, pluginName + "&e/" + cmd + " &2{playerName} &d{worldName} &6{gamemode} &3{inv|ender|extra}");
+				return;
+			}
+		}
+	}
+	
+	World getWhatWorldToUseFromWorld(World oldWorld) {
+		World rtrn = oldWorld;
+		String primaryWorldName = "";
+		int numOfLists = 0;
+		boolean Continue = true;
+		boolean worldNameWasRetrieved = false;
+		try{numOfLists = config.getInt("numberOfLists");} catch (Exception e) {Continue = false;e.printStackTrace();}
+		if(Continue) {
+			for(int num = 1; num <= numOfLists; num++) {
+				String worldNameList = "";
+				try{worldNameList = config.getString("list_" + num);
+				} catch (Exception e) {
+					EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
+					return oldWorld;
+				}
+				if(worldNameList != null) {
+					if(worldNameList.split("\\|").length >= 1) {
+						boolean firstRunIsOver = false;
+						for(String curWorldName : worldNameList.split("\\|")) {
+							if(worldNameWasRetrieved) {
+								break;
+							}
+							if(curWorldName.equals("") == false) {
+								if(firstRunIsOver == false) {
+									if(Bukkit.getWorld(curWorldName) != null) {
+										primaryWorldName = curWorldName;
+										firstRunIsOver = true;
+									}
+								}
+								if(oldWorld.getName().equalsIgnoreCase(curWorldName) || oldWorld.getName().equalsIgnoreCase(primaryWorldName)) {
+									rtrn = server.getWorld(primaryWorldName);
+									sendDebugMsg((primaryWorldName.equalsIgnoreCase(oldWorld.getName()) ? "&aThe world to use is still: \"&6" + primaryWorldName + "&a\"." : "&aThe world to use is now \"&6" + primaryWorldName + "&a\" instead of world \"&6" + oldWorld.getName() + "&a\"."));
+									worldNameWasRetrieved = true;
+								}
+							}
+						}
+						if(worldNameWasRetrieved == true) {
+							break;
+						}
+					} else {
+						EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
+					}
+				} else {
+					EPLib.unSpecifiedVarWarning("list_" + num, configFileName, pluginName);
+				}
+			}
+		} else {
+			EPLib.unSpecifiedVarWarning("numberOfLists", configFileName, pluginName);
+		}
+		return rtrn;
+	}
+	
+	/**This shows the given target parameter's given inventory to the given user parameter.(Usage: boolean openedOrNot = openPlayerInventory(Player user(the player who sees the inventory screen), Player target(the owner of the inventory), GameMode gm(can be null), String invToOpen)
+	 * @param user Player
+	 * @param target Player
+	 * @param gm GameMode
+	 * @param world World
+	 * @param invToOpen String
+	 * @return Whether or not the inventory was opened to the user for the given world(this depends on whether or not the user had permission to open the target's inventory for the given world).
+	 */
+	private String openPlayerInventory(Player user, Player target, GameMode gm, World world, String invToOpen) {// TODO openPlayerInventory()
+		String worldName = (worldsHaveSeparateInventories ? (world != null ? world : target.getWorld()) : getWhatWorldToUseFromWorld(world != null ? world : target.getWorld())).getName().toLowerCase().replaceAll(" ", "_");
+		sendDebugMsg("&a'user': " + user.getName());
+		sendDebugMsg("&a'target': " + target.getName());
+		String success = "true";
+		Inventory invToView = null;
+		if(gm == null) {
+			gm = user.getGameMode();
+			sendDebugMsg("&athe 'gm' var was null; setting it to \"" + user.getName() + "\"'s current gamemode, which is &f" + gm.name().toLowerCase() + "&a.");
+		}
+		sendDebugMsg("&a'gm': " + gm.name());
+		sendDebugMsg("&a'world': " + worldName);
+		sendDebugMsg("&a'invToOpen': " + invToOpen);
+		String gamemode = gm.name().toLowerCase();
+		String playerName = target.getName();
+		String FolderName = "Inventories" + File.separatorChar + playerName;
+		String invFileName = worldName + (loadByGameMode ? "." + gamemode : "") + ".inv";
+		String enderFileName = worldName + (loadByGameMode ? "." + gamemode : "") + ".enderInv";
+		String extraFileName = worldName + (loadByGameMode ? "." + gamemode : "") + ".extraChestInv";
+		//String armorFileName = (worldName + "." + gamemode + ".armorInv");
+		//String expFileName = (worldName + "." + gamemode + ".exp");
+		if(invToOpen.equalsIgnoreCase("inv")) {
+			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Inventory" : "Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), target));
+			} catch (Exception e) {
+				success = "false";
+				sendDebugMsg("Could not open the requested inventory because \"&f" + e.getMessage() + "&r&e\"...");
+				//e.printStackTrace();
+				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "inventory. Have you been to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
+			}
+		} else if(invToOpen.equalsIgnoreCase("ender") || invToOpen.equalsIgnoreCase("enderchest")) {
+			if(invToOpen.equalsIgnoreCase("enderchest")) {invToOpen = "ender";}
+			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Ender Chest" : "Ender Chest"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), target));
+			} catch (Exception e) {
+				success = "false";
+				sendDebugMsg("Could not open the requested ender chest because \"&f" + e.getMessage() + "&r&e\"...");
+				//e.printStackTrace();
+				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "ender chest. Have you been to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
+			}
+			
+		} else if(invToOpen.equalsIgnoreCase("extra")) {
+			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Extra Inventory" : "Extra Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraFileName, FolderName, dataFolderName, false), target));
+			} catch (Exception e) {
+				invToView = (loadByGameMode ? getPlayerExtraChest(target, server.getWorld(worldName), gm) : getPlayerExtraChest(target, server.getWorld(worldName)));
+			}
+		}
+		if(invToView != null) {
+			invToOpen = (invToOpen.equalsIgnoreCase("inv") ? "inv" : (invToOpen.equalsIgnoreCase("ender") ? "enderInv" : "extraChestInv"));
+			if(user.equals(target) && invToOpen.equalsIgnoreCase("extra") ? true : (user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + "." + target.getName()) || user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + ".*")) ) {
+				playersUsingInvsInfo.add(user.getName() + "|" + worldName);
+				user.openInventory(invToView);
+			} else {
+				success = "noperm";
+				sendDebugMsg("Could not open the requested inventory because &f" + user.getDisplayName() + "&r&e does not have any of the following permissions: &f" + ("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + "." + target.getName()) + "&e, &f" + ("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + ".*"));
+			}
+		} else {
+			success = "false";
+		}
+		return success;
+	}
+	
+	@SuppressWarnings("unused")
 	private static void sendInvPermUsage(CommandSender sender, String command) {
 		sendMessage(sender, pluginName + "&eUsage: /" + command + " {give|take} {view|edit} {inv|ender|extra} {playerName}");
 		sendMessage(sender, pluginName + "&eThis will {give|take} {playerName}'s permission to {view|edit} your {inv|ender|extra} Inventory(View this with \"&f/view&e\".");
 	}
+	
 	private static void sendInvPermUsageForConsole(CommandSender sender, String command) {
 		sendMessage(sender, pluginName + "&eUsage: /" + command + " {ownerName} {give|take} {view|edit} {inv|ender|extra} {playerName}");
 		sendMessage(sender, pluginName + "&eThis will {give|take} {playerName}'s permission to {view|edit} the {ownerName}'s {inv|ender|extra} Inventory.");
 	}
+	
+	@SuppressWarnings("unused")
 	private static void sendNotOnlineMessage(CommandSender sender, String arg) {
 		sendMessage(sender, pluginName + "&e\"&f" + arg + "&e\" is not a player, or is not online.");
 	}
+	
 	@EventHandler(priority=EventPriority.LOWEST)
 	public void onInventoryClickEvent(InventoryClickEvent evt) {//For checking perms and updating inventory screens.
-		EPLib.showDebugMsg(pluginName + "&bDebug: The onInventoryClickEvent Event has fired!", showDebugMsgs);
-		Inventory sourceInv = evt.getInventory();
+		final Player editor = (Player) evt.getWhoClicked();
+		Inventory sourceInv = evt.getInventory();//editor.getOpenInventory().getTopInventory();
+		final String invName = sourceInv.getTitle();
+		Player owner = null;
 		if(sourceInv.getHolder() instanceof Player) {
-			Player owner =  (Player) sourceInv.getHolder();
-			Player editor = (Player) evt.getWhoClicked();
-			boolean playerIsntViewingOtherType = true;
-			for(String curPlayerName : playersViewingInventories) {
-				if(curPlayerName.equals(editor.getName())) {
-					playerIsntViewingOtherType = false;
-				}
-			}
-			if(playerIsntViewingOtherType) {
-				EPLib.showDebugMsg("&eDebug: Running InventoryClickEvent normally...", true);
-				if(sourceInv.getTitle().contains("'s Extra Inventory")) {
-					EPLib.showDebugMsg(pluginName + "&bDebug: Test 1", showDebugMsgs);
-					final String ownerName = owner.getName();
-					final String editorName = editor.getName();
-					if(owner.getName().equals(editor.getName()) == false) {
-						EPLib.showDebugMsg(pluginName + "&bDebug: Test 1: \"&a" + ownerName + "&b\" &c!=&b \"&a" + editorName + "&b\".", showDebugMsgs);
-						if(editor.hasPermission("eim.edit.extra." + owner.getName()) == false && editor.hasPermission("eim.edit.extra.others") == false && editor.hasPermission("eim.*") == false && editor.hasPermission("eim.edit.*") == false) {
-							EPLib.showDebugMsg(pluginName + "&bDebug: Test 2: Permissions: &cFalse", showDebugMsgs);
-							final InventoryClickEvent evt1 = evt;
-							Bukkit.getServer().getScheduler().runTask(this, new Runnable() {
-								@Override
-								public void run() {
-									EPLib.showDebugMsg(pluginName + "&bDebug: Closing inventory of \"&a" + editorName + "&b\".", showDebugMsgs);
-									evt1.getView().close();
-								}
-							});
-							evt.setCancelled(true);
-							sendMessage(editor, pluginName + "&eYou do not have permission to edit \"&f" + owner.getDisplayName() + "&r&e\"'s extra inventory!");
-							return;
-						}
-						EPLib.showDebugMsg(pluginName + "&bDebug: Test 2: Permissions: &2True", showDebugMsgs);
-					} else {
-						//The owner of the extra inventory should have permission to edit it!
-						//If a check is needed here, then add it. Otherwise, it's fine.
-						EPLib.showDebugMsg(pluginName + "&bDebug: Test 1: \"&a" + ownerName + "&b\" &2==&b \"&a" + editorName + "&b\"", showDebugMsgs);
-					}
-					final Inventory inv = sourceInv;
-					EPLib.showDebugMsg(pluginName + "&bDebug: Test 3", showDebugMsgs);
-					final ArrayList<Player> finalplayersUsingInventories = playersUsingInventories;
-					Bukkit.getServer().getScheduler().runTask(this, new Runnable() {
-						@Override
-						public void run() {
-							for(Player curPlayer : finalplayersUsingInventories) {
-								EPLib.showDebugMsg(pluginName + "&bDebug: Test 4: curPlayer: \"&a" + curPlayer.getName() + "&b\"", showDebugMsgs);
-								curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
-							}
-						}
-					});
-				} else {
-					EPLib.showDebugMsg(pluginName + "&bDebug: \"&a" + sourceInv.getTitle() + "&b\" does not contain \"&a's Extra Inventory&b\".", showDebugMsgs);
-				}
-			} else {
-				// TODO This is for when a player used the "/view {gamemode} {inv|ender|extra}" command!
-				//Player arg for here: 'editor'
-				sendConsoleMessage("&aDebug: The inventory title that &f" + editor.getDisplayName() + "&r&a is clicking in is: &e" + sourceInv.getTitle());
-			}
-		} else {
-			sendConsoleMessage(pluginName + "The source inventory(named \"" + sourceInv.getTitle() + "\")'s holder was not an instance of a player...");
+			owner = (Player) sourceInv.getHolder();
 		}
-		EPLib.showDebugMsg(pluginName + "&bDebug: End of event.", showDebugMsgs);
+		sendDebugMsg("&1&n=====&r&6onInventoryClickEvent&f(&aInventoryClickEvent &2evt&f)&1&n=====&f: " + editor.getName());
+		if(owner != null) {
+			if(owner.getName().equals(editor.getName())) {
+				sendDebugMsg("&1&n=====&r *eThe owner is the one who is editing!");
+				if(invName.equals("container.crafting") || invName.equals("container.inventory")) {
+					sendDebugMsg("The owner is viewing their vanilla mc inventory. Let's save it and update the inv screens for it!");
+					sourceInv = owner.getOpenInventory().getBottomInventory();
+					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
+					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+					return;
+				}
+				GameMode invGameMode = (loadByGameMode ? (invName.contains("'s S") ? GameMode.SURVIVAL : (invName.contains("'s C") ? GameMode.CREATIVE : (invName.contains("'s A") ? GameMode.ADVENTURE : null))) : null);
+				String invType = (invName.contains("Extra Inventory") ? "extra" : (invName.contains("Inventory") ? "inv" : (invName.contains("Ender Chest") ? "ender" : "UNKNOWN")));
+				sendDebugMsg("&1&n=====&r&eThe owner is viewing their \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it!");
+				updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false);
+				updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+				sendDebugMsg("&1&n=====&r&eThe owner is viewing their \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it!");
+			} else {
+				sendDebugMsg("&1&n=====&r *eSomeone else other than the owner is editing! That person is: \"&f" + editor.getName() + "&r&e\"; the owner is: \"&f" + owner.getName() + "&r&e!\"");
+				
+				String invType = "";
+				if(invName.contains("Extra Inventory")) {
+					invType = "extra";
+				} else if(invName.contains("Ender Chest")) {
+					sendDebugMsg("&1&n3 B");
+					invType = "ender";
+				} else if(invName.contains("Inventory")) {
+					sendDebugMsg("&1&n3 C");
+					invType = "inv";
+				}
+				String pGamemode = (loadByGameMode ? "gamemode." + (invName.contains("'s S") ? "survival." : (invName.contains("'s C") ? "creative." : (invName.contains("'s A") ? "adventure." : "UNKNOWN."))) : "");
+				String perm = "eim.edit." + pGamemode + invType;
+				if(editor.hasPermission(perm) || editor.hasPermission(perm + "." + owner.getName()) || editor.hasPermission(perm + ".*") || editor.hasPermission("eim.edit.*") || editor.hasPermission("eim.*")) {
+					GameMode invGameMode = (loadByGameMode ? (invName.contains("'s S") ? GameMode.SURVIVAL : (invName.contains("'s C") ? GameMode.CREATIVE : (invName.contains("'s A") ? GameMode.ADVENTURE : null))) : null);
+					sendDebugMsg("&1&n=====&r&eThe editor is viewing the owners' \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it, since the editor has permission!");
+					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false);
+					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+				} else {
+					sendDebugMsg("&1&n=====&r&eThe editor did not have permission to edit the owners' inventory. Shutting it!");
+					closePlayerInventory(editor);
+				}
+			}
+			return;
+		} else if(invName.equals("container.enderchest")) {
+			updateOwnersInvAndSave(editor, sourceInv, (loadByGameMode ? editor.getGameMode() : null), "ender", editor.getWorld(), false);
+			updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+			sendDebugMsg("The owner is viewing their ender chest. Let's save it and update the inv screens for it!");
+		} else {
+			sendDebugMsg("&1&nATTENTION!!!&r &e???<Unknown happenstance 001>");
+		}
 	}
+	
+	void closePlayerInventory(final Player target) {
+		server.getScheduler().runTask(plugin, new Runnable() {
+			@Override
+			public void run() {
+				target.getOpenInventory().setCursor(null);
+				target.getOpenInventory().close();
+			}
+		});
+	}
+	
 	@EventHandler(priority=EventPriority.LOWEST)
 	public void onInventoryOpenEvent(InventoryOpenEvent evt) {//For checking perms.
-		Player player = Bukkit.getServer().getPlayer(evt.getPlayer().getName());
-		Inventory inv = evt.getInventory();
-		String invName = inv.getTitle();
-		boolean playerIsntViewingOtherType = true;
-		for(String curPlayerName : playersViewingInventories) {
-			if(curPlayerName.equals(player.getName())) {
-				playerIsntViewingOtherType = false;
-			}
-		}
-		if(playerIsntViewingOtherType) {
-			EPLib.showDebugMsg("&eDebug: Running InventoryOpenEvent normally...", true);
-			if(invName.equals(player.getName() + "'s Extra Inventory")) {
-				playersUsingInventories.add(player);
-				EPLib.showDebugMsg(pluginName + "&bDebug: Added &a" + player.getName() + "&b to the list of players who are using a custom inventory screen!", showDebugMsgs);
-			} else if(invName.contains("'s Extra Inventory")) {
-				EPLib.showDebugMsg(pluginName + "&bDebug: Attempting to scan through all online players and see if we get a match for \"&a" + invName + "&b\".)", showDebugMsgs);
-				for(Player curPlayer : Bukkit.getServer().getOnlinePlayers()) {
-					if(invName.equals(curPlayer.getName() + "'s Extra Inventory")) {
-						if(player.hasPermission("eim.view.extra.others") || player.hasPermission("eim.view.extra." + curPlayer.getName()) || player.hasPermission("eim.*") || player.hasPermission("eim.view.*")) {
-							playersUsingInventories.add(player);
-							EPLib.showDebugMsg(pluginName + "&aDebug: Added &f" + player.getName() + "&a to the list of players who are using a custom inventory screen!", showDebugMsgs);
-						} else {
-							sendMessage(player, pluginName + "&eYou do not have permission to view &f" + curPlayer.getName() + "&e's extra inventory.");
-							evt.setCancelled(true);
-						}
-						break;
-					}
-				}
-			}
-		} else {
-			// TODO This is for when a player used the "/view {gamemode} {inv|ender|extra}" command!
-			//Player arg for here: 'player'
-			sendConsoleMessage("&aDebug: The inventory title that &f" + player.getDisplayName() + "&r&a has opened is: &e" + inv.getTitle());
-		}
+		Player player = server.getPlayer(evt.getPlayer().getName());
+		sendDebugMsg("&1&n=====&r&6onInventoryOpenEvent&f(&aInventoryOpenEvent &2evt&f)&1&n=====&f: " + player.getName());
+		sendDebugMsg("&aThe inventory title that &f" + player.getDisplayName() + "&r&a has opened is: &e" + evt.getInventory().getTitle());
 	}
+	
 	@EventHandler(priority=EventPriority.LOWEST)
 	public void onInventoryCloseEvent(InventoryCloseEvent evt) {//For saving.
-		Player player = Bukkit.getServer().getPlayer(evt.getPlayer().getName());
+		sendDebugMsg("&1&n1");
+		Player viewer = server.getPlayer(evt.getPlayer().getName());
 		Inventory inv = evt.getInventory();
-		String invName = inv.getTitle();
-		String worldName = player.getWorld().getName().toLowerCase().replaceAll(" ", "_");
-		String playerName = player.getName();
-		String FolderName = "Inventories" + File.separatorChar + playerName;
-		boolean savedInventory = false;
-		String invFileName = "";
-		if(loadByGameMode == false) {
-			invFileName = (worldName + ".extraChestInv");
-		} else {
-			invFileName = (worldName + (player.getGameMode() == GameMode.SURVIVAL ? ".survival" : (player.getGameMode() == GameMode.CREATIVE ? ".creative" : ".adventure")) + ".extraChestInv");
+		final String invName = inv.getTitle();
+		Player owner = null;
+		if(inv.getHolder() instanceof Player) {
+			sendDebugMsg("&1&n2");
+			owner = (Player) inv.getHolder();
 		}
-		boolean playerIsntViewingOtherType = true;
-		for(String curPlayerName : playersViewingInventories) {
-			if(curPlayerName.equals(player.getName())) {
-				playerIsntViewingOtherType = false;
-			}
-		}
-		if(playerIsntViewingOtherType) {
-			EPLib.showDebugMsg("&eDebug: Running InventoryCloseEvent normally...", true);
-			if(invName.equals(playerName + "'s Extra Inventory")) {
-				EPLib.showDebugMsg("&aSaved player \"&f" + player.getName() + "&a\"'s Inventory (\"&f" + invName + "&a\").", showDebugMsgs);
-				EPLib.showDebugMsg("&aDebug: State One(players' own extra chest)", showDebugMsgs);
-				savedInventory = FileMgmt.WriteToFile(invFileName, InventoryAPI.serializeInventory(inv), true, FolderName, dataFolderName);
-				sendMessage(player, (savedInventory ? "&eInventory \"&f" + invName + "&e\" was saved." : "&eUnable to save the inventory \"&f" + invName + "&e\"."));
-				playersUsingInventories.remove(player);
-				EPLib.showDebugMsg(pluginName + "&eDebug: Removed \"&f" + playerName + "&e\" from the list of players who are using a custom inventory screen!", showDebugMsgs);
-			} else if(invName.contains("'s Extra Inventory")) {
-				EPLib.showDebugMsg("&aPlayer name: \"&f" + player.getName() + "&a\"; Inventory Title: \"&f" + invName + "&a\"", showDebugMsgs);
-				EPLib.showDebugMsg("&eDebug: Expected Inventory Title: \"&f" + (player.getName() + "'s Extra Inventory") + "&e\"", showDebugMsgs);
-				EPLib.showDebugMsg("&aDebug: Attempting to scan through all online players and see if we get a match for \"&f" + invName + "&a\".)", showDebugMsgs);
-				String ownerName = "";
-				for(Player curPlayer : Bukkit.getServer().getOnlinePlayers()) {
-					if(invName.equals(curPlayer.getName() + "'s Extra Inventory")) {
-						ownerName = curPlayer.getDisplayName();
-						if(player.hasPermission("eim.edit.others") || player.hasPermission("eim.edit." + curPlayer.getName()) || player.hasPermission("eim.*") || player.hasPermission("eim.edit.*")) {
-							worldName = curPlayer.getWorld().getName().toLowerCase().replaceAll(" ", "_");
-							FolderName = "Inventories" + File.separatorChar + curPlayer.getName();
-							savedInventory = FileMgmt.WriteToFile(invFileName, InventoryAPI.serializeInventory(inv), true, FolderName, dataFolderName);
-							sendMessage(player, (savedInventory ? "&eInventory \"&f" + invName + "&e\" was saved." : "&eUnable to save the inventory \"&f" + invName + "&e\"."));
-						}
-						break;
-					}
-				}
-				sendMessage(player, (savedInventory ? "&eInventory \"&f" + invName + "&e\" was saved." : "&eUnable to save the inventory \"&f" + invName + "&e\"." + (!(ownerName.equals("")) ? "&c(You do not have &f" + ownerName + "&r&c's permission to edit their inventory!)" : "(Did the owner leave while you had their extra inventory open?)")));
-				playersUsingInventories.remove(player);
-				EPLib.showDebugMsg(pluginName + "&eDebug: Removed \"&f" + playerName + "&e\" from the list of players who are using a custom inventory screen!", showDebugMsgs);
-			}
+		String invType = "";
+		if(inv.getTitle().contains("Extra Inventory")) {
+			sendDebugMsg("&1&n3 A");
+			invType = "extra";
+		} else if(inv.getTitle().contains("Ender Chest")) {
+			sendDebugMsg("&1&n3 B");
+			invType = "ender";
+		} else if(inv.getTitle().contains("Inventory")) {
+			sendDebugMsg("&1&n3 C");
+			invType = "inv";
+		} else if(inv.getTitle().equals("container.enderchest")) {
+			sendDebugMsg("&1&n3 D");
+			invType = "container.enderchest";
+		} else if(inv.getTitle().equals("container.crafting") || inv.getTitle().equals("container.inventory")) {
+			sendDebugMsg("&1&n3 E");
+			invType = "container.inventory";
 		} else {
-			// TODO This is for when a player used the "/view {gamemode} {inv|ender|extra}" command!
-			//Player arg for here: 'player'
-			sendConsoleMessage("&aDebug: The inventory that &f" + player.getDisplayName() + "&r&a just closed had the title: &e" + inv.getTitle());
-			if(inv.getHolder() instanceof Player) {
-				Player invOwner = (Player) inv.getHolder();
-				boolean ownerIsEditing = true;
-				if(invOwner.getName().equals(player.getName()) == false) {
-					ownerIsEditing = false;
+			sendDebugMsg("&1&n3 F");
+		}
+		if(owner != null) {
+			if(invType.equals("container.inventory")) {
+				sendDebugMsg("&eDebug: 'invType' == \"" + invType + "\"! The inventory title is: &f" + inv.getTitle());
+				updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), true);
+				
+				return;
+			}
+			if(invType.equals("container.enderchest")) {
+				sendDebugMsg("&eDebug: 'invType' == \"" + invType + "\"! The inventory title is: &f" + inv.getTitle());
+				updateOwnersInvAndSave(owner, owner.getEnderChest(), (loadByGameMode ? owner.getGameMode() : null), "ender", owner.getWorld(), true);
+				
+				return;
+			}
+			if(invType.equals("")) {
+				sendDebugMsg("'invType' == \"\"! The inventory title is: &f" + inv.getTitle() + "&e; &1&nThis means we can't very well do anything...");
+				return;
+			}
+			if(viewer.getName().equals(owner.getName())) {
+				sendDebugMsg("'owner'(&f" + owner.getName() + "&r&e) == 'player'(&f" + viewer.getName() + "&r&e)!");
+				sendDebugMsg("&1&nWe don't have to check for perms -- unless the owner isn't in the same gamemode and world as the inventory!");
+				if((invType.equalsIgnoreCase("inv") || invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") || invType.equalsIgnoreCase("extra")) == false) {
+					sendDebugMsg("&cThe invType didn't pan out! It still equals: \"&f" + invType + "&c\"!");
+					return;
 				}
-				if(inv.getTitle().endsWith("'s S Inventory")) {//A player's survival inventory
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.survival.inv") || player.hasPermission("eim.edit.gamemode.survival.inv.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Survival Inventory was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.survival.inv." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.survival.inv.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Survival Inventory was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fSurvival Inventory&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s C Inventory")) {//A player's creative inventory
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.creative.inv") || player.hasPermission("eim.edit.gamemode.creative.inv.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Creative Inventory was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.creative.inv." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.creative.inv.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Creative Inventory was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fCreative Inventory&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s A Inventory")) {//A player's adventure inventory
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.adventure.inv") || player.hasPermission("eim.edit.gamemode.adventure.inv.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Adventure Inventory was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.adventure.inv." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.adventure.inv.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.inv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Adventure Inventory was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fAdventure Inventory&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s S Ender Chest")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.survival.ender") || player.hasPermission("eim.edit.gamemode.survival.ender.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Survival Ender Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.survival.ender." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.survival.ender.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Survival Ender Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fSurvival Ender Chest&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s C Ender Chest")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.creative.ender") || player.hasPermission("eim.edit.gamemode.creative.ender.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Creative Ender Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.creative.ender." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.creative.ender.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Creative Ender Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fCreative Ender Chest&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s A Ender Chest")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.adventure.ender") || player.hasPermission("eim.edit.gamemode.adventure.ender.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Adventure Ender Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.adventure.ender." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.adventure.ender.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.enderInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Adventure Ender Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fAdventure Ender Chest&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s S Extra Inventory")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.survival.extra") || player.hasPermission("eim.edit.gamemode.survival.extra.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Survival Extra Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.survival.extra." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.survival.extra.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".survival.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Survival Extra Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fSurvival Extra Chest&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s C Extra Inventory")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.creative.extra") || player.hasPermission("eim.edit.gamemode.creative.extra.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Creative Extra Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.creative.extra." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.creative.extra.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".creative.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Creative Extra Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fCreative Extra Chest&c!");
-					}
-				} else if(inv.getTitle().endsWith("'s A Extra Inventory")) {
-					if(ownerIsEditing && (player.hasPermission("eim.edit.gamemode.adventure.extra") || player.hasPermission("eim.edit.gamemode.adventure.extra.*") || player.hasPermission("eim.*"))) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						sendMessage(player, pluginName + "&aYour Adventure Extra Chest was successfully saved!");
-					} else if(player.hasPermission("eim.edit.gamemode.adventure.extra." + invOwner.getName()) || player.hasPermission("eim.edit.gamemode.adventure.extra.*") || player.hasPermission("eim.*")) {
-						FileMgmt.WriteToFile(invOwner.getWorld().getName().toLowerCase().replaceAll(" ", "_") + ".adventure.extraChestInv", InventoryAPI.serializeInventory(inv), true, "Inventories" + File.separatorChar + invOwner.getName(), dataFolderName);
-						invOwner.getInventory().setContents(inv.getContents());
-						sendMessage(player, pluginName + "&f" + invOwner.getDisplayName() + "&r&e's Adventure Extra Chest was successfully saved.");
-					} else {
-						sendMessage(player, pluginName + "&cYou do not have &f" + invOwner.getDisplayName() + "&r&c's permission to edit their &fAdventure Extra Chest&c!");
-					}
-				} else {
-					sendConsoleMessage("&eDebug: The inventory's title wasn't a title made for this situation(how'd it wind up here?): &f" + inv.getTitle());
-				}
+				updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true);
 			} else {
-				sendConsoleMessage("&eDebug: The inventory(name: \"&f" + inv.getTitle() + "&r&e\")'s holder was not an instance of a player...");
+				sendDebugMsg("'owner'(&f" + owner.getName() + "&r&e) != 'player'(&f" + viewer.getName() + "&r&e)!");
+				sendDebugMsg("&1&nNow we check for perms!");
+				String pGamemode = (loadByGameMode ? "gamemode." + (invName.contains("'s S") ? "survival." : (invName.contains("'s C") ? "creative." : (invName.contains("'s A") ? "adventure." : "UNKNOWN."))) : "");
+				String perm = "eim.edit." + pGamemode + invType;
+				if(viewer.hasPermission(perm) || viewer.hasPermission(perm + "." + owner.getName()) || viewer.hasPermission(perm + ".*") || viewer.hasPermission("eim.edit.*") || viewer.hasPermission("eim.*")) {
+					if((invType.equalsIgnoreCase("inv") || invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") || invType.equalsIgnoreCase("extra")) == false) {
+						sendDebugMsg("&cThe invType didn't pan out! It still equals: \"&f" + invType + "&c\"!");
+						return;
+					}
+					updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true);
+				} else {
+					sendDebugMsg("Unable to save the inventory \"&f" + invName + "&r&e\" because the viewer/editor (\"&f" + viewer.getName() + "&r&e\") did not have any of the following permissions: ");
+					sendDebugMsg("\"&f" + perm + "&r&e\";");
+					sendDebugMsg("\"&f" + perm + "." + owner.getName() + "&r&e\";");
+					sendDebugMsg("\"&f" + perm + ".*&r&e\";");
+					sendDebugMsg("\"&feim.edit.*&r&e\";");
+					sendDebugMsg("\"&feim.*&r&e\".");
+					sendMessage(viewer, pluginName + "&eWhoops! It appears you do not have permission to edit that inventory. Has &f" + owner.getDisplayName() + "&r&e not given you permission to edit that inventory yet?");
+				}
 			}
-			playersViewingInventories.remove(player.getName());
+		} else {
+			sendDebugMsg("'owner' == null in &6onInventoryCloseEvent&f(&aInventoryCloseEvent &2evt&f)&e!");
 		}
 	}
-	public Inventory getPlayerExtraChest(Player target, GameMode gm) {
+	
+	World getWorldFromPlayerInvInfo(Player owner, boolean removeFromList) {
+		World rtrn = owner.getWorld();
+		for(String player_worldName : playersUsingInvsInfo) {
+			String[] Info = player_worldName.split("\\|");
+			String playerName = Info[0];
+			String worldName = Info[1];
+			if(playerName.equals(owner.getName())) {
+				World getWorld = server.getWorld(worldName);
+				if(getWorld != null) {
+					sendDebugMsg("&aThe world retrieved from the list is: &f" + getWorld.getName());
+				} else {
+					sendDebugMsg("&aThe world retrieved from the list is null...(?)");
+				}
+				if(removeFromList) {removePlayerFromList(player_worldName);}
+				return getWorld;
+			}
+		}
+		sendDebugMsg("&aThe list did not return a world. Returning the following world instead: &f" + rtrn.getName());
+		return rtrn;
+	}
+	
+	void removePlayerFromList(final String plyrToRemove) {
+		server.getScheduler().runTask(plugin, new Runnable() {
+			@Override
+			public void run() {
+				playersUsingInvsInfo.remove(plyrToRemove);
+			}
+		});
+	}
+	
+	public static Inventory getPlayerExtraChest(Player target, World world, GameMode gm) {
 		Inventory invToOpen = null;
-		String worldName = target.getWorld().getName().toLowerCase().replaceAll(" ", "_");
+		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = target.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
 		String invName = (playerName + "'s Extra Inventory");
 		String extraInvFileName = (worldName + "." + gm.name().toLowerCase() + ".extraChestInv");
-		try{
-			invToOpen = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraInvFileName, FolderName, dataFolderName, false), target);
+		try{invToOpen = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraInvFileName, FolderName, dataFolderName, false), target);
 		} catch(Exception e) {
-			invToOpen = Bukkit.getServer().createInventory(target, 54, invName);
+			invToOpen = server.createInventory(target, 54, invName);
 			FileMgmt.WriteToFile(extraInvFileName, InventoryAPI.serializeInventory(invToOpen), true, FolderName, dataFolderName);
 		}
 		return invToOpen;
 	}
-	public Inventory getPlayerExtraChest(Player target) {
+	
+	public static Inventory getPlayerExtraChest(Player target, World world) {
 		Inventory invToOpen = null;
-		String worldName = target.getWorld().getName().toLowerCase().replaceAll(" ", "_");
+		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = target.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
 		String invName = (playerName + "'s Extra Inventory");
 		String extraInvFileName = worldName + ".extraChestInv";
-		try{
-			invToOpen = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraInvFileName, FolderName, dataFolderName, false), target);
+		try{invToOpen = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraInvFileName, FolderName, dataFolderName, false), target);
 		} catch(Exception e) {
-			invToOpen = Bukkit.getServer().createInventory(target, 54, invName);
+			invToOpen = server.createInventory(target, 54, invName);
 			FileMgmt.WriteToFile(extraInvFileName, InventoryAPI.serializeInventory(invToOpen), true, FolderName, dataFolderName);
 		}
 		return invToOpen;
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public void onInventoryEvent(InventoryEvent evt) {
+		if(evt.getInventory().getHolder() instanceof Player) {
+			Player player = (Player) evt.getInventory().getHolder();
+			sendDebugMsg("&1&n=====&r&6onInventoryEvent&f(&aInventoryEvent &2evt&f)&1&n=====&f: " + player.getName());
+		}
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public void onPlayerPickupItemEvent(PlayerPickupItemEvent evt) {
+		Player player = evt.getPlayer();
+		sendDebugMsg("&1&n=====&r&6onPlayerPickupItemEvent&f(&aPlayerPickupItemEvent &2evt&f)&1&n=====&f: " + player.getName());
+		updateOwnersInvAndSave(player, player.getInventory(), (loadByGameMode ? player.getGameMode() : null), "inv", player.getWorld(), false);
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public void onPlayerDropItemEvent(PlayerDropItemEvent evt) {
+		Player player = evt.getPlayer();
+		sendDebugMsg("&aPlayer name involved with onPlayerDropItemEvent(): &f" + player.getName());
+		Player owner = evt.getPlayer();
+
+		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
+
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public void onPlayerItemHeldEvent(org.bukkit.event.player.PlayerItemHeldEvent evt) {
+		sendDebugMsg("&aPlayerItemHeldEvent(&21/1&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+		Player owner = evt.getPlayer();
+
+		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
+
+	}
+	
+	@EventHandler(priority=EventPriority.HIGHEST)
+	public void onPlayerPlaceBlockEvent(PlayerInteractEvent evt) {
+		sendDebugMsg("&aPlayerInteractEvent(&21/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+		if(evt.getAction().equals(Action.RIGHT_CLICK_BLOCK)) {
+			sendDebugMsg("&aPlayerInteractEvent(&22/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+			if(evt.getItem() != null) {
+				sendDebugMsg("&aPlayerInteractEvent(&23/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+				if(evt.getItem().getTypeId() != 0) {
+					sendDebugMsg("&aPlayerInteractEvent(&24/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+					Player owner = evt.getPlayer();
+
+					updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
+
+				} else {
+					sendDebugMsg("&aPlayerInteractEvent(&c-4/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+				}
+			} else {
+				sendDebugMsg("&aPlayerInteractEvent(&c-3/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+			}
+		} else {
+			sendDebugMsg("&aPlayerInteractEvent(&c-2/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
+		}
+	}
+	
+	Inventory updateOwnersInvAndSave(final Player owner, final Inventory inv, final GameMode gm, final String invType, World givenWorld, final boolean removeFromList) {
+		sendDebugMsg("0&1&n");
+		final World world = getWhatWorldToUseFromWorld(givenWorld);
+		String UFownerName = "";
+		if(owner != null) {
+			sendDebugMsg("&1&n1");
+			UFownerName = limitStringToNumOfChars(owner.getName(), 12);
+		}
+		final String ownerName = UFownerName;
+		server.getScheduler().runTask(plugin, new Runnable() {
+			@Override
+			public void run() {
+				sendDebugMsg("&1&n2");
+				sendDebugMsg("&6updateOwnersInv&f(&cfinal &aPlayer &2owner(" + ownerName + ")&f. &cfinal &aInventory &2inv(" + inv.getTitle() + ")&f, &cfinal &2GameMode gm(" + (gm != null ? gm.name() : "null") + ")&f, &cfinal &aString &2invType(" + invType.toLowerCase() + ")&f, &cfinal &aWorld &2world(" + world.getName() + ")&f, &cfinal boolean &2removeFromList(" + removeFromList + ")&f)");
+				if(gm != null) {// if(loadByGameMode) {
+					sendDebugMsg("&1&n3 A");
+					sendDebugMsg("'gm' != null! It equals: &3" + gm.name());
+					if(owner.getGameMode().equals(gm)) {
+						sendDebugMsg("&1&n4 A");
+						sendDebugMsg("The owners' gamemode is the same as 'gm'!");
+						World ownersWorld = getWhatWorldToUseFromWorld(getWorldFromPlayerInvInfo(owner, removeFromList));
+						if(ownersWorld.getName().equals(world.getName())) {
+							sendDebugMsg("&1&n5 A");
+							sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
+							String FolderName = "Inventories" + File.separatorChar + owner.getName();
+							String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_") + (gm.equals(GameMode.SURVIVAL) ? ".survival" : (gm.equals(GameMode.CREATIVE) ? ".creative" : (gm.equals(GameMode.ADVENTURE) ? ".adventure" : ".UNKNOWN")));
+							String invName = "";
+							String gamemode = " " + (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
+							boolean Continue = true;
+							if(invType.equalsIgnoreCase("inv")) {
+								sendDebugMsg("&1&n6 A");
+								fileNameToSaveTo += ".inv";
+								invName = ownerName + "'s" + gamemode + " Inventory";
+							} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
+								sendDebugMsg("&1&n6 B");
+								fileNameToSaveTo += ".enderInv";
+								invName = ownerName + "'s" + gamemode + " Ender Chest";
+							} else if(invType.equalsIgnoreCase("extra")) {
+								sendDebugMsg("&1&n6 C");
+								fileNameToSaveTo += ".extraChestInv";
+								invName = ownerName + "'s" + gamemode + " Extra Inventory";
+							} else {
+								sendDebugMsg("&1&n6 D");
+								Continue = false;
+							}
+							GameMode invGameMode = (inv.getTitle().contains("'s S") ? GameMode.SURVIVAL : (inv.getTitle().contains("'s C") ? GameMode.CREATIVE : (inv.getTitle().contains("'s A") ? GameMode.ADVENTURE : null)));
+							sendDebugMsg("&1&n=====&r &e'invGameMode' == &f" + (invGameMode != null ? invGameMode.name().toLowerCase() : "null"));
+							if(gm.equals(invGameMode) == false && invGameMode != null) {
+								sendDebugMsg("&1&n=====&r &eThe inventory's gamemode does not match the owners' gamemode! We shall just have to act as if the owner weren't here....");
+								
+								
+								fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_") + (invGameMode.equals(GameMode.SURVIVAL) ? ".survival" : (invGameMode.equals(GameMode.CREATIVE) ? ".creative" : (invGameMode.equals(GameMode.ADVENTURE) ? ".adventure" : ".UNKNOWN")));
+								
+								
+								if(invType.equalsIgnoreCase("inv")) {
+									sendDebugMsg("&1&n6_1 A");
+									fileNameToSaveTo += ".inv";
+									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Inventory";
+								} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
+									sendDebugMsg("&1&n6_1 B");
+									fileNameToSaveTo += ".enderInv";
+									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Ender Chest";
+								} else if(invType.equalsIgnoreCase("extra")) {
+									sendDebugMsg("&1&n6_1 C");
+									fileNameToSaveTo += ".extraChestInv";
+									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Extra Inventory";
+								}
+								
+								
+								
+								sendDebugMsg("&1&n7_1 A");
+								sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
+								boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
+								sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"! The owners' inventory has NOT been updated[the owner's gamemode(\"&f" + gm.name().toLowerCase() + "&e\") != the inventory's gamemode(\"&f" + invGameMode.name().toLowerCase() + "&e\")!].");
+								updateViewersInvScreens(owner, inv, invGameMode, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+								
+								return;
+							}
+							if(Continue) {
+								sendDebugMsg("&1&n7 A");
+								sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
+								boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
+								sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"!" + (invType.equalsIgnoreCase("inv") ? " The owners' inventory has been updated." : ""));
+								if(invType.equalsIgnoreCase("inv")) {
+									owner.getInventory().setContents(inv.getContents());
+								}
+								updateViewersInvScreens(owner, inv, gm, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+							} else {
+								sendDebugMsg("&1&n7 B");
+								sendDebugMsg("The invType wasn't one of the four applicable strings! Why is it set to \"&f" + invType + "&r&e\"???");
+								return;
+							}
+							sendDebugMsg("&1&n8");
+						} else {
+							sendDebugMsg("&1&n5 B");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n'world': &r&f" + world.getName());
+							sendDebugMsg("&1&n'ownersWorld': &r&f" + ownersWorld.getName());
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+						}
+					} else {
+						sendDebugMsg("&1&n4 B");
+						
+						
+						
+						
+						
+						GameMode invGameMode = (inv.getTitle().contains("'s S") ? GameMode.SURVIVAL : (inv.getTitle().contains("'s C") ? GameMode.CREATIVE : (inv.getTitle().contains("'s A") ? GameMode.ADVENTURE : null)));
+						sendDebugMsg("&1&n=====&r &e'invGameMode' == &f" + (invGameMode != null ? invGameMode.name().toLowerCase() : "null"));
+						sendDebugMsg("The owners' gamemode is NOT the same as 'gm'! Owner's gamemode: &f" + owner.getGameMode().name().toLowerCase() + "&r&e; 'gm': &f" + gm.name().toLowerCase());
+						World ownersWorld = getWhatWorldToUseFromWorld(getWorldFromPlayerInvInfo(owner, removeFromList));
+						if(ownersWorld.getName().equals(world.getName())) {
+							sendDebugMsg("&1&n5 A");
+							sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
+							String FolderName = "Inventories" + File.separatorChar + owner.getName();
+							String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_") + (invGameMode.equals(GameMode.SURVIVAL) ? ".survival" : (invGameMode.equals(GameMode.CREATIVE) ? ".creative" : (invGameMode.equals(GameMode.ADVENTURE) ? ".adventure" : ".UNKNOWN")));
+							String invName = "";
+							sendDebugMsg("&1&n=====&r &eThe inventory's gamemode does not match the owners' gamemode! We shall just have to act as if the owner weren't here....");
+							if(invType.equalsIgnoreCase("inv")) {
+								sendDebugMsg("&1&n6_1 A");
+								fileNameToSaveTo += ".inv";
+								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Inventory";
+							} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
+								sendDebugMsg("&1&n6_1 B");
+								fileNameToSaveTo += ".enderInv";
+								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Ender Chest";
+							} else if(invType.equalsIgnoreCase("extra")) {
+								sendDebugMsg("&1&n6_1 C");
+								fileNameToSaveTo += ".extraChestInv";
+								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Extra Inventory";
+							}
+							sendDebugMsg("&1&n7_1 A");
+							sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
+							boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
+							sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"! The owners' inventory has NOT been updated[the owner's gamemode(\"&f" + gm.name().toLowerCase() + "&e\") != the inventory's gamemode(\"&f" + invGameMode.name().toLowerCase() + "&e\")!].");
+							updateViewersInvScreens(owner, inv, invGameMode, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+							sendDebugMsg("&1&n8");
+						} else {
+							sendDebugMsg("&1&n5 B");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n'world': &r&f" + world.getName());
+							sendDebugMsg("&1&n'ownersWorld': &r&f" + ownersWorld.getName());
+							sendDebugMsg("&1&n=====ATTENTION=====");
+							sendDebugMsg("&1&n=====ATTENTION=====");
+						/**/sendDebugMsg("&1&n=====&r &eWell, now what??");
+						}
+						return;
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+					}
+				} else {// if(loadByGameMode == false) {
+					sendDebugMsg("&1&n3 B");
+					World ownersWorld = getWhatWorldToUseFromWorld(owner.getWorld());
+					if(ownersWorld.getName().equals(world.getName())) {
+						sendDebugMsg("&1&n4 A");
+						sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
+						String FolderName = "Inventories" + File.separatorChar + owner.getName();
+						String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_");
+						String invName = "";
+						boolean Continue = true;
+						if(invType.equalsIgnoreCase("inv")) {
+							sendDebugMsg("&1&n5 A");
+							fileNameToSaveTo += ".inv";
+							invName = ownerName + "'s Inventory";
+						} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
+							sendDebugMsg("&1&n5 B");
+							fileNameToSaveTo += ".inv";
+							invName = ownerName + "'s Ender Chest";
+						} else if(invType.equalsIgnoreCase("extra")) {
+							sendDebugMsg("&1&n5 C");
+							fileNameToSaveTo += ".inv";
+							invName = ownerName + "'s Extra Inventory";
+						} else {
+							sendDebugMsg("&1&n5 D");
+							Continue = false;
+						}
+						if(Continue) {
+							sendDebugMsg("&1&n6 A");
+							sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
+							boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
+							sendDebugMsg("&1&n=====&r &eThe plugin has " + (success ? "successfully written to" : "failed to write to") + " the file \"&z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e\" for the inventory \"&f" + invName + "&r&e\"!" + (invType.equalsIgnoreCase("inv") ? " The owners' inventory has been updated." : ""));
+							if(invType.equalsIgnoreCase("inv")) {
+								owner.getInventory().setContents(inv.getContents());
+							}
+							updateViewersInvScreens(owner, inv, null, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+						} else {
+							sendDebugMsg("&1&n6 B");
+							sendDebugMsg("The invType wasn't one of the four applicable strings! Why is it set to \"&f" + invType + "&r&e\"???");
+							return;
+						}
+					} else {
+						sendDebugMsg("&1&n4 B");
+						sendDebugMsg("&1&n=====ATTENTION=====");
+						sendDebugMsg("&1&n=====ATTENTION=====");
+						sendDebugMsg("&1&n'world': &r&f" + world.getName());
+						sendDebugMsg("&1&n'ownersWorld': &r&f" + ownersWorld.getName());
+						sendDebugMsg("&1&n=====ATTENTION=====");
+						sendDebugMsg("&1&n=====ATTENTION=====");
+					}
+				}
+				sendDebugMsg("&1&nThe End!");
+			}
+		});
+		sendDebugMsg("&1&nEnd of updateOwnersInvAndSave(); beginning of public void run()...");
+		return inv;
+	}
+	
+	String getFirstLetterOfGameMode(GameMode gm) {
+		return gm.name().substring(0, 1).toUpperCase();
+	}
+	
+	String sendDebugMsg(String str) {
+		return (forceDebugMsgs ? sendConsoleMessage(pluginName + "&eDebug: " + str) : EPLib.formatColorCodes(pluginName + "&eDebug: " + str));
+	}
+	
+	Inventory updateViewersInvScreens(final Player owner, final Inventory inv, final GameMode gm, final String invType) {
+		server.getScheduler().runTask(plugin, new Runnable() {
+			@Override
+			public void run() {
+				for(Player curPlayer : server.getOnlinePlayers()) {
+					Inventory viewersInv = curPlayer.getOpenInventory().getTopInventory();
+					if(gm == null) {// if(loadByGameMode == false) {
+						String invTitleToUpdateBy = owner.getName() + "'s " + (invType.equalsIgnoreCase("inv") ? "Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? "Ender Chest" : "Extra Inventory"));
+						sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+						if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+							curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
+						} else if(curPlayer.getName().equals(owner.getName())) {
+							sendDebugMsg("");
+						} else {
+							sendDebugMsg("...but alas, it does not...");
+						}
+					} else {// if(loadByGameMode) {
+						String gamemode = (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
+						String invTitleToUpdateBy = limitStringToNumOfChars(owner.getName(), 12) + "'s " + (invType.equalsIgnoreCase("inv") ? gamemode + " Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? gamemode + " Ender Chest" : gamemode + " Extra Inventory"));
+						sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+						if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+							curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
+						} else {
+							sendDebugMsg("...but alas, it does not...");
+						}
+					}
+				}
+			}
+		});
+		return inv;
+	}
+	
+	String limitStringToNumOfChars(String str, int limit) {
+		return (str != null ? (str.length() >= 1 ? (str.substring(0, (str.length() >= limit ? limit : str.length()))) : "") : "");
 	}
 	
 }
