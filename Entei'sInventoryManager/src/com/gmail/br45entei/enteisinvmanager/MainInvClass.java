@@ -3,8 +3,6 @@ package com.gmail.br45entei.enteisinvmanager;
 import java.io.File;
 import java.util.ArrayList;
 
-import net.milkbowl.vault.permission.Permission;
-
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -15,11 +13,13 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryEvent;
@@ -35,15 +35,22 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.PluginDescriptionFile;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.gmail.br45entei.enteispluginlib.EPLib;
 import com.gmail.br45entei.enteispluginlib.FileMgmt;
 import com.gmail.br45entei.enteispluginlib.InvalidYamlException;
-//import org.bukkit.scheduler.BukkitTask;
+import com.gmail.br45entei.enteispluginlib.InventoryAPI;
 
 public class MainInvClass extends JavaPlugin implements Listener {
+	public String sendDevMsg(String str) {
+		str = pluginName + EPLib.formatColorCodes(str);
+		if(config.getBoolean("showDebugs") == true) {
+			sendConsoleMessage(str);
+		}
+		return str;
+	}
+	
 	private final MainInvClass plugin = this;
 	public static PluginDescriptionFile pdffile;
 	public static ConsoleCommandSender console;
@@ -57,11 +64,17 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	public static boolean updateInvScreensDebounce = false;
 	private static ArrayList<String> playersUsingInvsInfo = new ArrayList<String>();
 
+	private boolean enabled = true;
 	// TODO To be loaded from config.yml
 	public static boolean showDebugMsgs = false;
 	public static String noPerm = "";
+	public static String configVersion = "";
 	public static boolean worldsHaveSeparateInventories = false;
 	public static boolean manageExp = false;
+	
+	public static boolean manageHealth = false;
+	public static boolean manageHunger = false;
+	
 	public static boolean loadByGameMode = false;
 	static final boolean forceDebugMsgs = false;
 	// TODO Functions
@@ -73,15 +86,12 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	public void onDisable() {
 		sendConsoleMessage(pluginName + "&eSaving all online players' inventories...");
 		for(Player curPlayer : server.getOnlinePlayers()) {
-			if(worldsHaveSeparateInventories) {
-				savePlayerInventory(curPlayer, curPlayer.getWorld());
-			} else {
-				updatePlayerInventory(curPlayer, curPlayer.getWorld(), null, "save");
-			}
+			savePlayerInventory(curPlayer, curPlayer.getWorld(), curPlayer.getGameMode());
 			curPlayer.getOpenInventory().close();
 		}
 		//saveYamls();
 		sendConsoleMessage(pluginName + "&eVersion " + pdffile.getVersion() + " is now disabled.");
+		enabled = false;
 	}
 	
 	@Override
@@ -98,11 +108,17 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		// TODO Loading Files
 		LoadConfig();
 		// TODO End of Loading Files
-		sendConsoleMessage(pluginName + "&aVersion " + pdffile.getVersion() + " is now enabled!");
+		if(EPLib.enabled == false) {
+			enabled = false;
+			server.getPluginManager().disablePlugin(plugin);
+		}
+		if(enabled) {sendConsoleMessage(pluginName + "&aVersion " + pdffile.getVersion() + " is now enabled!");}
 	}
-	public static void loadPlayerInventory(Player player, World world, boolean wipeInvs) {loadPlayerInventory(player, world, player.getGameMode(), wipeInvs);}
-	public static void savePlayerInventory(Player player, World world) {savePlayerInventory(player, world, player.getGameMode());}
-	public static void loadPlayerInventory(Player player, World world, GameMode gm, boolean wipeInvs) {
+	
+	public void loadPlayerInventory(Player player, World world, GameMode gm, boolean wipeInvs) {
+		World oldWorld = world;
+		world = getWhatWorldToUseFromWorld(world);
+		sendConsoleMessage("&1&n=====&r &aDebug: &6loadPlayerInventory&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldWorld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f, &cboolean &2wipeinvs(" + wipeInvs + ")&f);");
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
@@ -111,6 +127,8 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String armorFileName = "";
 		String enderFileName = "";
 		String expFileName = "";
+		
+		
 		if(loadByGameMode == false) {
 			invFileName = (worldName + ".inv");
 			armorFileName = (worldName + ".armorInv");
@@ -125,26 +143,28 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		}
 		try{
 			if(wipeInvs) {
+				player.getOpenInventory().setCursor(null);
 				player.getInventory().setContents(blankInv.getContents());
 				player.getInventory().setArmorContents(new ItemStack[] {new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1), new ItemStack(Material.AIR, 1)});
 				player.getEnderChest().setContents(server.createInventory(player, InventoryType.ENDER_CHEST).getContents());
+				
 				if(manageExp) {
 					player.setLevel(0);
 					player.setExp(0);
 				}
 			}
-			String invTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Inventory") : "'s Inventory");
-			String enderTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Ender Chest") : "'s Ender Chest");
-			//String extraTitle = player.getName() + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Extra Inventory") : "'s Extra Inventory");
+			String invTitle = limitStringToNumOfChars(player.getName(), 12) + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Inventory") : "'s Inventory");
+			String enderTitle = limitStringToNumOfChars(player.getName(), 12) + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Ender Chest") : "'s Ender Chest");
+			//String extraTitle = limitStringToNumOfChars(player.getName(), 12) + (loadByGameMode ? "'s " + ((player.getGameMode().equals(GameMode.SURVIVAL) ? "S " : (player.getGameMode().equals(GameMode.CREATIVE) ? "C " : (player.getGameMode().equals(GameMode.ADVENTURE) ? "A " : "? "))) + "Extra Inventory") : "'s Extra Inventory");
 
 
 
 			try{player.getInventory().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player).getContents());
 			} catch (Exception e) {
-				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + invFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the gamemode-specific version of this file; if unsuccessful, will save over it from the player's current inventory instead.", true);
+				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + invFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current inventory instead.", true);
 				//Start 'smart' loading
 				if(loadByGameMode == false) {
-					invFileName = (worldName + "" + player.getGameMode().name().toLowerCase() + ".inv"); //Intentional swappage.
+					invFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".inv"); //Intentional swappage.
 					try{player.getInventory().setContents(InventoryAPI.setTitle(invTitle, InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), player)).getContents());
 						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + invFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
 					} catch (Exception e1) {
@@ -168,7 +188,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			try{Inventory newArmorInv = InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(armorFileName, FolderName, dataFolderName, false), player);
 				player.getInventory().setArmorContents(new ItemStack[] {newArmorInv.getItem(0), newArmorInv.getItem(1), newArmorInv.getItem(2), newArmorInv.getItem(3)});
 			} catch (Exception e) {
-				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + armorFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the gamemode-specific version of this file; if unsuccessful, will save over it from the player's current armor instead.", true);
+				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + armorFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current armor instead.", true);
 				//Start 'smart' loading
 				if(loadByGameMode == false) {
 					armorFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".armorInv"); //Intentional swappage.
@@ -196,7 +216,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 
 			try{player.getEnderChest().setContents(InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), player).getContents());
 			} catch (Exception e) {
-				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + enderFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the gamemode-specific version of this file; if unsuccessful, will save over it from the player's current enderchest instead.", true);
+				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + enderFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current enderchest instead.", true);
 				//Start 'smart' loading
 				if(loadByGameMode == false) {
 					enderFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".enderInv"); //Intentional swappage
@@ -228,7 +248,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				try{player.setLevel(InventoryAPI.deserializeLevel(FileMgmt.ReadFromFile(expFileName, FolderName, dataFolderName, false)));
 					player.setExp(InventoryAPI.deserializeExp(FileMgmt.ReadFromFile(expFileName, FolderName, dataFolderName, false)));
 				} catch (Exception e) {
-					EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + expFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the gamemode-specific version of this file; if unsuccessful, will save over it from the player's current exp instead.", true);
+					EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + expFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current exp instead.", true);
 					//Start 'smart' loading
 					if(loadByGameMode == false) {
 						expFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".exp"); //Intentional swappage
@@ -257,7 +277,10 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		} catch (Exception e) {e.printStackTrace();/*savePlayerInventory(player, world);*/}
 	}
 	
-	public static void savePlayerInventory(Player player, World world, GameMode gm) {
+	public void savePlayerInventory(Player player, World world, GameMode gm) {
+		World oldWorld = world;
+		world = getWhatWorldToUseFromWorld(world);
+		sendConsoleMessage("&1&n=====&r &aDebug: &6savePlayerInventory&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldworld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f);");
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = player.getName();
 		String FolderName = "Inventories" + File.separatorChar + playerName;
@@ -265,6 +288,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String armorFileName = "";
 		String enderFileName = "";
 		String expFileName = "";
+		
 		if(loadByGameMode == false) {
 			invFileName = (worldName + ".inv");
 			armorFileName = (worldName + ".armorInv");
@@ -281,28 +305,252 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		FileMgmt.WriteToFile(armorFileName, InventoryAPI.serializeInventory(player, "armor"), true, FolderName, dataFolderName);
 		FileMgmt.WriteToFile(enderFileName, InventoryAPI.serializeInventory(player, "enderchest"), true, FolderName, dataFolderName);
 		if(manageExp) {FileMgmt.WriteToFile(expFileName, InventoryAPI.serializeExperience(player), true, FolderName, dataFolderName);} else {EPLib.sendOneTimeMessage(pluginName + "&eThe var \"&fmanageExp&e\" was set to false in the config.yml; not managing player experience levels.", "console");}
+		
+	
+	}
+	
+	@SuppressWarnings("boxing")
+	public void loadPlayerHealthAndHunger(Player player, World world, GameMode gm) {
+		if(manageHealth) {
+			World oldWorld = world;
+			world = getWhatWorldToUseFromWorld(world);
+			sendConsoleMessage("&1&n=====&r &aDebug: &6loadPlayerHealth&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldWorld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f);");
+			String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
+			String playerName = player.getName();
+			String FolderName = "Inventories" + File.separatorChar + playerName;
+			
+			
+			String healthFileName = "";
+			double playerHealth = player.getHealth(); //Add in support for saving & loading player health!!!!
+			
+			
+			if(loadByGameMode == false) {
+				healthFileName = (worldName + ".health");
+			} else {
+				String gamemode = (gm == GameMode.SURVIVAL ? ".survival" : (gm == GameMode.CREATIVE ? ".creative" : ".adventure"));
+				healthFileName = (worldName + gamemode + ".health");
+			}
+			
+			Double newHealth = (double) 0;
+			try{newHealth = InventoryAPI.deserializeHealth(FileMgmt.ReadFromFile(healthFileName, FolderName, dataFolderName, false), player);
+				sendConsoleMessage("&cDEBUG: The deserialized health is: \"" + newHealth + "\"...");
+				Double Zero = (double) 0;
+				if(newHealth.equals(Zero)) {
+					player.setHealth(playerHealth);
+					EPLib.sendConsoleMessage(pluginName + "&e[1]Set player \"" + player.getName() + "\"'s  health to: " + playerHealth);
+				} else {
+					player.setHealth(newHealth);
+					EPLib.sendConsoleMessage(pluginName + "&e[1]Set player \"" + player.getName() + "\"'s  health to: " + newHealth);
+				}
+			} catch (Exception e) {
+				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + healthFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current health instead.", true);
+				newHealth = (double) 0;
+				
+				
+				//Start 'smart' loading
+				if(loadByGameMode == false) {
+					healthFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".health"); //Intentional swappage.
+					try{newHealth = InventoryAPI.deserializeHealth(FileMgmt.ReadFromFile(healthFileName, FolderName, dataFolderName, false), player);
+						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + healthFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
+					} catch (Exception e1) {
+						healthFileName = (worldName + ".health"); //Intentional swappage.
+					}
+					FileMgmt.WriteToFile(healthFileName, InventoryAPI.serializeHealth(player), true, FolderName, dataFolderName);
+				} else {
+					healthFileName = (worldName + ".health"); //Intentional swappage.
+					try{newHealth = InventoryAPI.deserializeHealth(FileMgmt.ReadFromFile(healthFileName, FolderName, dataFolderName, false), player);
+						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + healthFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
+					} catch (Exception e1) {
+						healthFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".health"); //Intentional swappage.
+					}
+					FileMgmt.WriteToFile(healthFileName, InventoryAPI.serializeHealth(player), true, FolderName, dataFolderName);
+				}
+				//End smart loading.
+				
+				
+				Double Zero = (double) 0;
+				if(newHealth.equals(Zero)) {
+					player.setHealth(playerHealth);
+					EPLib.sendConsoleMessage(pluginName + "&e[2]Set player \"" + player.getName() + "\"'s  health to: " + playerHealth);
+				} else {
+					player.setHealth(newHealth);
+					EPLib.sendConsoleMessage(pluginName + "&e[2]Set player \"" + player.getName() + "\"'s  health to: " + newHealth);
+				}
+			}
+			sendConsoleMessage("&aThe end result of the \"newHealth\" is: \"" + newHealth + "\"... The player's health ended up being: \"" + player.getHealth() + "\"...");
+		}
+		
+		
+		if(manageHunger) {
+			World oldWorld = world;
+			world = getWhatWorldToUseFromWorld(world);
+			sendConsoleMessage("&1&n=====&r &aDebug: &6loadPlayerHunger&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldWorld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f);");
+			String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
+			String playerName = player.getName();
+			String FolderName = "Inventories" + File.separatorChar + playerName;
+			
+			
+			String hungerFileName = "";
+			
+			String playerHunger = InventoryAPI.serializeHunger(player);
+			
+			//int playerFood = Integer.valueOf(InventoryAPI.deserializeHunger(playerHunger, player)[0]);
+			//float playerExhaustion = Float.valueOf(InventoryAPI.deserializeHunger(playerHunger, player)[1]);
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			if(loadByGameMode == false) {
+				hungerFileName = (worldName + ".hunger");
+			} else {
+				String gamemode = (gm == GameMode.SURVIVAL ? ".survival" : (gm == GameMode.CREATIVE ? ".creative" : ".adventure"));
+				hungerFileName = (worldName + gamemode + ".hunger");
+			}
+			
+			String[] newHunger = {"", ""};
+			try{newHunger = InventoryAPI.deserializeHunger(FileMgmt.ReadFromFile(hungerFileName, FolderName, dataFolderName, false), player);
+				sendConsoleMessage("&cDEBUG: The deserialized hunger is: \"FOOD:" + newHunger[0] + "\"; \"EXHAUSTION:" + newHunger[1] + "\"...");
+				
+				
+				player.setFoodLevel(Integer.valueOf(newHunger[0])) ;
+				player.setExhaustion(Float.valueOf(newHunger[1]));
+				EPLib.sendConsoleMessage(pluginName + "&e[1]Set player \"" + player.getName() + "\"'s  hunger to: " + playerHunger);
+				
+				
+			} catch (Exception e) {
+				EPLib.showDebugMsg(pluginName + "&eError loading file \"&f" + hungerFileName + "&e\"(Cause: \"&c" + e.toString() + "&e\"). Attempting to load from the " + (worldsHaveSeparateInventories ? "gamemode-specific" : "world-specific") + " version of this file; if unsuccessful, will save over it from the player's current hunger instead.", true);
+				newHunger = InventoryAPI.deserializeHunger(playerHunger, player);
+				
+				
+				//Start 'smart' loading
+				if(loadByGameMode == false) {
+					hungerFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".hunger"); //Intentional swappage.
+					try{newHunger = InventoryAPI.deserializeHunger(FileMgmt.ReadFromFile(hungerFileName, FolderName, dataFolderName, false), player);
+						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + hungerFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
+					} catch (Exception e1) {
+						hungerFileName = (worldName + ".hunger"); //Intentional swappage.
+					}
+					FileMgmt.WriteToFile(hungerFileName, InventoryAPI.serializeHunger(player), true, FolderName, dataFolderName);
+				} else {
+					hungerFileName = (worldName + ".hunger"); //Intentional swappage.
+					try{newHunger = InventoryAPI.deserializeHunger(FileMgmt.ReadFromFile(hungerFileName, FolderName, dataFolderName, false), player);
+						EPLib.showDebugMsg(pluginName + "&eSuccessfuly loaded from the file \"&f" + hungerFileName + "&r&e\" instead. Saving the contents of this file to the original one to prevent future data loss.", true);
+					} catch (Exception e1) {
+						hungerFileName = (worldName + "." + player.getGameMode().name().toLowerCase() + ".hunger"); //Intentional swappage.
+					}
+					FileMgmt.WriteToFile(hungerFileName, InventoryAPI.serializeHunger(player), true, FolderName, dataFolderName);
+				}
+				//End smart loading.
+				
+				player.setFoodLevel(Integer.valueOf(newHunger[0]));
+				player.setExhaustion(Float.valueOf(newHunger[1]));
+				EPLib.sendConsoleMessage(pluginName + "&e[2]Set player \"" + player.getName() + "\"'s  hunger to: \"FOOD: " + newHunger[0] + "\"; \"EXHAUSTION: " + newHunger[1] + "\"...");
+			}
+			sendConsoleMessage("&aThe end result of the \"newHunger\" is: \"FOOD: " + newHunger[0] + "\"; \"EXHAUSTION: " + newHunger[1] + " \"... The player's hunger ended up being: \"" + player.getHealth() + "\"...");
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+		}
+	}
+	
+	public void savePlayerHealthAndHunger(Player player, World world, GameMode gm) {
+		if(manageHealth) {
+			World oldWorld = world;
+			world = getWhatWorldToUseFromWorld(world);
+			sendConsoleMessage("&1&n=====&r &aDebug: &6savePlayerHealth&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldworld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f);");
+			String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
+			String playerName = player.getName();
+			String FolderName = "Inventories" + File.separatorChar + playerName;
+			String healthFileName = "";
+			
+			
+			if(loadByGameMode == false) {
+				healthFileName = (worldName + ".health");
+			} else {
+				String gamemode = (gm == GameMode.SURVIVAL ? ".survival" : (gm == GameMode.CREATIVE ? ".creative" : ".adventure"));
+				healthFileName = (worldName + gamemode + ".health");
+			}
+			FileMgmt.WriteToFile(healthFileName, InventoryAPI.serializeHealth(player), true, FolderName, dataFolderName);
+		}
+		if(manageHunger) {
+			World oldWorld = world;
+			world = getWhatWorldToUseFromWorld(world);
+			sendConsoleMessage("&1&n=====&r &aDebug: &6savePlayerHunger&f(&aPlayer &2player(" + player.getName() + ")&f, &aWorld &2world(" + world.getName() + "; &3oldworld&2 = \"" + oldWorld.getName() + "\")&f, &2GameMode gm(" + gm.name() + ")&f);");
+			String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
+			String playerName = player.getName();
+			String FolderName = "Inventories" + File.separatorChar + playerName;
+			String hungerFileName = "";
+			
+			
+			if(loadByGameMode == false) {
+				hungerFileName = (worldName + ".hunger");
+			} else {
+				String gamemode = (gm == GameMode.SURVIVAL ? ".survival" : (gm == GameMode.CREATIVE ? ".creative" : ".adventure"));
+				hungerFileName = (worldName + gamemode + ".hunger");
+			}
+			FileMgmt.WriteToFile(hungerFileName, InventoryAPI.serializeHunger(player), true, FolderName, dataFolderName);
+		}
+	}
+	
+	@EventHandler(priority=EventPriority.LOWEST)
+	private void onEntityDamageEvent(EntityDamageEvent evt) {
+		Entity entity = evt.getEntity();
+		if(entity instanceof Player) {
+			Player hurted = ((Player) entity);
+			EPLib.sendConsoleMessage("&cTEST: \"" + hurted.getName() + "\" was damaged by \"" + evt.getDamage() + "\" points, which was caused by: \"" + evt.getCause().name().toLowerCase() + "\". &eTheir health is now \"" + hurted.getHealth() + "\" out of a maximum of \"" + hurted.getMaxHealth() + "\"...");
+			//hurted.setMaxHealth(200);
+			
+			savePlayerHealthAndHunger(hurted, hurted.getWorld(), hurted.getGameMode());
+			
+		}
 	}
 	
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerJoinEvent(PlayerJoinEvent evt) {
 		Player newPlayer = evt.getPlayer();
-		if(worldsHaveSeparateInventories) {
-			loadPlayerInventory(newPlayer, newPlayer.getWorld(), false);
-		} else {
-			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + newPlayer.getName() + "&e\"'s inventory for world \"&a" + newPlayer.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
-			updatePlayerInventory(newPlayer, null, newPlayer.getWorld(), "load");
-		}
+		loadPlayerInventory(newPlayer, newPlayer.getWorld(), newPlayer.getGameMode(), false);
+		loadPlayerHealthAndHunger(newPlayer, newPlayer.getWorld(), newPlayer.getGameMode());
 	}
 	
 	@EventHandler(priority=EventPriority.LOWEST)
 	private void onPlayerQuit(PlayerQuitEvent evt) {
 		Player oldPlayer = evt.getPlayer();
-		if(worldsHaveSeparateInventories) {
-			savePlayerInventory(oldPlayer, oldPlayer.getWorld());
-		} else {
-			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + oldPlayer.getName() + "&e\"'s inventory for world \"&a" + oldPlayer.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
-			updatePlayerInventory(oldPlayer, oldPlayer.getWorld(), null, "save");
-		}
+		savePlayerInventory(oldPlayer, oldPlayer.getWorld(), oldPlayer.getGameMode());
+		savePlayerHealthAndHunger(oldPlayer, oldPlayer.getWorld(), oldPlayer.getGameMode());
 	}
 	
 	@EventHandler(priority=EventPriority.HIGHEST)
@@ -312,60 +560,30 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		final GameMode newGameMode = evt.getNewGameMode();
 		if(evt.isCancelled() == false) {
 			savePlayerInventory(player, player.getWorld(), oldGameMode);
-			server.getScheduler().runTaskLater(plugin, new Runnable() {
-				@Override
-				public void run() {
-					loadPlayerInventory(player, player.getWorld(), newGameMode, true);
-					sendMessage(player, pluginName + "&aYour inventory has been updated to your current gamemode!");
+			savePlayerHealthAndHunger(player, player.getWorld(), player.getGameMode());
+			
+			server.getScheduler().runTaskLater(plugin, new Runnable() {@Override public void run() {
+				loadPlayerInventory(player, player.getWorld(), newGameMode, true);
+				sendMessage(player, pluginName + "&aYour inventory has been updated to your current gamemode!");
+				
+				if(manageHealth) {loadPlayerHealthAndHunger(player, player.getWorld(), player.getGameMode());
+					sendMessage(player, pluginName + "&aYour health " + (manageHunger ? "and hunger" : "") + " have been updated to your current gamemode!");
 				}
-			}, 2);//Two ticks later(To let the player's inventory get saved before wiping it)!
+				
+			}}, 2);//Two ticks later(To let the player's inventory get saved before wiping it)!
 		}
 	}
 	
-	/**@param evt PlayerChangedWorldEvent
-	 */
 	@EventHandler(priority=EventPriority.LOWEST) 
 	private void onPlayerChangedWorldEvent(PlayerChangedWorldEvent evt) {
 		Player player = evt.getPlayer();
-		World newWorld = (worldsHaveSeparateInventories ? player.getWorld() : getWhatWorldToUseFromWorld(player.getWorld()));
+		World newWorld = getWhatWorldToUseFromWorld(player.getWorld());
 		World oldWorld = evt.getFrom();
-		if(worldsHaveSeparateInventories) {
-			//Save the old inventory to disk
-/**//**//**/savePlayerInventory(player, oldWorld);
-			//Load the new inventory from disk
-/**//**//**/loadPlayerInventory(player, newWorld, false);
-		} else {
-			EPLib.showDebugMsg(pluginName + "&eThe var \"worldsHaveSeparateInventories\" equals false; not managing the player \"&a" + player.getName() + "&e\"'s inventory for world \"&a" + player.getWorld().getName() + "&e\" as an individual world inventory. Instead, managing as a grouped world, if applicable.", showDebugMsgs);
-			updatePlayerInventory(player, oldWorld, newWorld, "both");
-		}
-	}
-	
-	/**@param player Player
-	 * @param oldWorld World
-	 * @param newWorld World
-	 * @param loadSaveOrBoth Boolean 
-	 */
-	public void updatePlayerInventory(Player player, World oldWorld, World newWorld, String loadSaveOrBoth) {
-		String oldWorldName = "";
-		if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {
-			oldWorldName = oldWorld.getName();
-		}
-		EPLib.showDebugMsg(pluginName + "&a'WorldTo': \"&6" + player.getWorld().getName() + "&a\"", showDebugMsgs);
-		EPLib.showDebugMsg(pluginName + "&a'WorldFrom': \"&6" + oldWorldName + "&a\"", showDebugMsgs);
-		if(loadSaveOrBoth.equalsIgnoreCase("save") || loadSaveOrBoth.equalsIgnoreCase("both")) {
-			World worldToSaveTo = getWhatWorldToUseFromWorld(oldWorld);
-/**//**//**/savePlayerInventory(player, worldToSaveTo);
-			sendConsoleMessage(pluginName + (worldToSaveTo.getName().equalsIgnoreCase(oldWorld.getName()) ? "&1&nSAVING:&r &aSaved player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + worldToSaveTo.getName() + "&a\"." : "&1&nSAVING:&r &aSaved player \"&f" + player.getName() + "&a\"'s inventory to world: \"&6" + worldToSaveTo.getName() + "&a\" instead of saving to world \"&6" + oldWorld.getName() + "&a\"."));
-		} else {
-			sendDebugMsg("&aThis is a player join event, isn't it?");
-		}
-		if(loadSaveOrBoth.equalsIgnoreCase("load") || loadSaveOrBoth.equalsIgnoreCase("both")) {
-			World worldToLoadFrom = getWhatWorldToUseFromWorld(newWorld);
-/**//**//**/loadPlayerInventory(player, worldToLoadFrom, true);
-			sendConsoleMessage(pluginName + (worldToLoadFrom.getName().equalsIgnoreCase(newWorld.getName()) == false ? "&1&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory from world: \"&6" + worldToLoadFrom.getName() + "&a\" instead of loading from world \"&6" + newWorld.getName() + "&a\"." : "&1&nLOADING:&r &aLoaded player \"&f" + player.getName() + "&a\"'s inventory for world: \"&6" + worldToLoadFrom.getName() + "&a\"."));
-		} else {
-			sendDebugMsg("&aThis is a player quit event, isn't it?");
-		}
+		savePlayerInventory(player, oldWorld, player.getGameMode());//Save the old inventory to disk
+		savePlayerHealthAndHunger(player, oldWorld, player.getGameMode());
+		
+		loadPlayerInventory(player, newWorld, player.getGameMode(), false);//Load the new inventory from disk
+		loadPlayerHealthAndHunger(player, newWorld, player.getGameMode());
 	}
 	
 	static String sendConsoleMessage(String msg) {
@@ -426,9 +644,9 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			//if(e2 != null) {Causes = Causes.concat(Causes + "\r" + e2.toString());}
 			throw new InvalidYamlException(Causes);
 		} catch (InvalidYamlException e) {
-			FileMgmt.LogCrash(e, "reloadYamls()", "Failed to load one or more of the following YAML files: " + unloadedFiles, false, dataFolderName);
+			FileMgmt.LogCrash(e, "reloadFiles()", "Failed to load one or more of the following YAML files: " + unloadedFiles, false, dataFolderName);
 			EPLib.showDebugMsg(pluginName + "&cThe following YAML files failed to load properly! Check the server log or \"" + dataFolderName + "\\crash-reports.txt\" to solve the problem: (" + unloadedFiles + ")", true);
-			//MainCommandClass.logger.severe(e.toString());//A test
+			//logger.severe(e.toString());//A test
 			return false;
 		}
 	}
@@ -447,14 +665,28 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		} catch (InvalidYamlException e) {
 			FileMgmt.LogCrash(e, "saveYamls()", "Failed to save one or more of the following YAML files: (" + unSavedFiles + ")", false, dataFolderName);
 			EPLib.showDebugMsg(pluginName + "&cThe following YAML files failed to get saved properly! Check the server log or \"" + dataFolderName + "\\crash-reports.txt\" to solve the problem: (" + unSavedFiles + ")", true);
-			//MainCommandClass.logger.severe(e.toString());//A test
+			//logger.severe(e.toString());//A test
 			return false;
 		}
 	}
 	
 	@SuppressWarnings("boxing")
-	private static boolean loadYamlVariables() {
+	private boolean loadYamlVariables() {
 		boolean loadedAllVars = true;
+		try{
+			configVersion = EPLib.formatColorCodes(config.getString("version"));
+			if(configVersion.equals(pdffile.getVersion())) {
+				EPLib.showDebugMsg(pluginName + "&aThe " + configFileName + "'s version matches this plugin's version(&f" + pdffile.getVersion() + "&a)!", showDebugMsgs);
+			} else {
+				EPLib.showDebugMsg(pluginName + "&eThe " + configFileName + "'s version does NOT match this plugin's version(&f" + pdffile.getVersion() + "&e)! Make sure that you update the " + configFileName + " from this plugin's latest version! You can find this at &ahttp://dev.bukkit.org/bukkit-mods/enteis-group-manager/&e.", true/*showDebugMsgs*/);
+			}
+		} catch (Exception e) {
+			EPLib.unSpecifiedVarWarning("version", "config.yml", pluginName);
+			sendConsoleMessage(pluginName + "&cInvalid configuration settings detected! Disabling this plugin to prevent bad settings from corrupting saved player data...");
+			Bukkit.getPluginManager().disablePlugin(plugin);
+			enabled = false;
+			return false;
+		}
 		try{showDebugMsgs = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("showDebugMsgs")))) == true;
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("showDebugMsgs", "config.yml", pluginName);}
 		try{noPerm = EPLib.formatColorCodes(config.getString("noPermission"));
@@ -465,12 +697,22 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		try{manageExp = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("manageExp")))) == true;
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("manageExp", "config.yml", pluginName);}
 		
+		
+		
+		try{manageHealth = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("manageHealth")))) == true;
+		} catch(Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("manageHealth", "config.yml", pluginName);}
+		
+		try{manageHunger = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("manageHunger")))) == true;
+		} catch(Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("manageHunger", "config.yml", pluginName);}
+
+		
 		try{loadByGameMode = (Boolean.valueOf(EPLib.formatColorCodes(config.getString("loadByGameMode")))) == true;
 		} catch (Exception e) {loadedAllVars = false;EPLib.unSpecifiedVarWarning("loadByGameMode", "config.yml", pluginName);}
 		
 		return loadedAllVars;
 	}
 	
+	@SuppressWarnings("deprecation")
 	@Override
 	public boolean onCommand(final CommandSender sender, final Command cmd, final String command, final String[] args) {
 		String strArgs = "";
@@ -487,6 +729,14 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		}
 		if(userName.equals("") == true) {
 			userName = sender.getName();
+		}
+		if(command.equalsIgnoreCase("listinvscreendata")) {
+			if(sender instanceof ConsoleCommandSender) {
+				listPlayerInvScreenData();
+			} else {
+				sendMessage(sender, pluginName + "This command can only be used by the console.");
+			}
+			return true;
 		}
 		if(command.equalsIgnoreCase("enteisinventorymanager")||command.equalsIgnoreCase("eim")) {
 			if(args.length >= 1) {
@@ -540,10 +790,16 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					if(userHasPerm || user == null) {
 						if(args.length == 1) {
 							String authors = "\"";
-							for(String curAuthor : pdffile.getAuthors()) {authors = authors + curAuthor + "\", \"";}
-							if(authors.equals("\"") == false) {authors = authors + ".";authors = authors.replace("\", \".", "\"");
-							} else {authors = "&oNone specified in plugin.yml!&r";}
-							sendMessage(sender, EPLib.green + pdffile.getPrefix() + " " + pdffile.getVersion() + "; Main class: " + pdffile.getMain() + "; Author(s): (" + authors + "&2).");
+							for(String curAuthor : pdffile.getAuthors()) {
+								authors += curAuthor + "\", \"";
+							}
+							if(authors.equals("\"") == false) {
+								authors += ".";
+								authors = authors.replace("\", \".", "\"");
+							} else {
+								authors = "&oNone specified in plugin.yml!&r";
+							}
+							sendMessage(sender, EPLib.green + pdffile.getPrefix() + " " + pdffile.getVersion() + "; Main class: " + pdffile.getMain() + "; Author(s): (" + authors + "&a).");
 						} else {
 							sendMessage(sender, pluginName + "&eUsage: /" + command + " info");
 						}
@@ -674,24 +930,34 @@ public class MainInvClass extends JavaPlugin implements Listener {
 			sendMessage(sender, pluginName + "&e/" + command + " is used to display a player's inventory. When used by the console, it is used to display the targeted players' inventory on their screen. This command is, however, currently NYI for console use.(Not Yet Implemented)");
 			return true;
 		} else if(command.equalsIgnoreCase("invperm")) {
-			RegisteredServiceProvider<Permission> permProvider = null;
-			@SuppressWarnings("unused")Permission permission = null;
-			if(EPLib.vaultIsAvailable) {
-				permProvider = server.getServicesManager().getRegistration(net.milkbowl.vault.permission.Permission.class);
-				if(permProvider != null) {
-					permission = permProvider.getProvider();
+			if(EPLib.vaultAvailable != false) {
+				if(EPLib.perm != null) {
 					EPLib.showDebugMsg(pluginName + "&aInternal variable \"permission\" is not null!", showDebugMsgs);
 				} else {
 					EPLib.showDebugMsg(pluginName + "&4Could not load permission service...(No Vault Plugin, or coding issue?)", showDebugMsgs);
 					sendMessage(sender, pluginName + "&eWhoops! There was an error when trying to load &bVault&e's permission service... Please let the server owner know so he/she can fix it!");
+					return true;
 				}
 			} else {
 				sendMessage(sender, pluginName + "&eSorry, this command is only available with &bVault&e installed! Please ask the server owner about installing &bVault&e.");
 				return true;
 			}
-			if(user != null) {
+			if(user != null) {// TODO /invperm {give|take} {view|edit} [gamemode] [worldName] {inv|ender|extra} {playerName}
 				//Used by Player
 				//MAKE THIS!
+				
+				
+				//String giveOrTake = (args[0] != null ? args[0] : null);
+				//String viewOrEdit = (args[1] != null ? args[1] : null);
+				
+				if(args.length == 7) {// TODO /invperm {give|take} {view|edit} [gamemode] [worldName] {inv|ender|extra} {playerName} [ownerName]
+					
+				}
+				
+				
+				
+				
+				
 				return true;
 			}
 			//Used by Console
@@ -721,6 +987,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	
 	World getWhatWorldToUseFromWorld(World oldWorld) {
 		World rtrn = oldWorld;
+		if(worldsHaveSeparateInventories) {return rtrn;}
 		String primaryWorldName = "";
 		int numOfLists = 0;
 		boolean Continue = true;
@@ -779,8 +1046,10 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	 * @param invToOpen String
 	 * @return Whether or not the inventory was opened to the user for the given world(this depends on whether or not the user had permission to open the target's inventory for the given world).
 	 */
-	private String openPlayerInventory(Player user, Player target, GameMode gm, World world, String invToOpen) {// TODO openPlayerInventory()
-		String worldName = (worldsHaveSeparateInventories ? (world != null ? world : target.getWorld()) : getWhatWorldToUseFromWorld(world != null ? world : target.getWorld())).getName().toLowerCase().replaceAll(" ", "_");
+	
+	String openPlayerInventory(Player user, Player target, GameMode gm, World world, String invToOpen) {// TODO openPlayerInventory()
+		invToOpen = invToOpen.toLowerCase();
+		String worldName = getWhatWorldToUseFromWorld(target.getWorld()).getName().toLowerCase().replaceAll(" ", "_");
 		sendDebugMsg("&a'user': " + user.getName());
 		sendDebugMsg("&a'target': " + target.getName());
 		String success = "true";
@@ -800,33 +1069,33 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		String extraFileName = worldName + (loadByGameMode ? "." + gamemode : "") + ".extraChestInv";
 		//String armorFileName = (worldName + "." + gamemode + ".armorInv");
 		//String expFileName = (worldName + "." + gamemode + ".exp");
-		if(invToOpen.equalsIgnoreCase("inv")) {
-			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Inventory" : "Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), target));
+		if(invToOpen.equals("inv")) {
+			try{invToView = InventoryAPI.setTitle(limitStringToNumOfChars(target.getName(), 12) + "'s " + (loadByGameMode ? getFirstLetterOfGameMode(gm) + " Inventory" : "Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(invFileName, FolderName, dataFolderName, false), target));
 			} catch (Exception e) {
 				success = "false";
 				sendDebugMsg("Could not open the requested inventory because \"&f" + e.getMessage() + "&r&e\"...");
 				//e.printStackTrace();
-				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "inventory. Have you been to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
+				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "inventory. " + (target.getName().equals(user.getName()) ? "Have you been" : "Has &f" + target.getDisplayName() + "&r&e been") + " to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
 			}
-		} else if(invToOpen.equalsIgnoreCase("ender") || invToOpen.equalsIgnoreCase("enderchest")) {
-			if(invToOpen.equalsIgnoreCase("enderchest")) {invToOpen = "ender";}
-			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Ender Chest" : "Ender Chest"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), target));
+		} else if(invToOpen.equals("ender") || invToOpen.equals("enderchest")) {
+			if(invToOpen.equals("enderchest")) {invToOpen = "ender";}
+			try{invToView = InventoryAPI.setTitle(limitStringToNumOfChars(target.getName(), 12) + "'s " + (loadByGameMode ? getFirstLetterOfGameMode(gm) + " Ender Chest" : "Ender Chest"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(enderFileName, FolderName, dataFolderName, false), target));
 			} catch (Exception e) {
 				success = "false";
 				sendDebugMsg("Could not open the requested ender chest because \"&f" + e.getMessage() + "&r&e\"...");
 				//e.printStackTrace();
-				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "ender chest. Have you been to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
+				sendMessage(user, pluginName + "&eUnable to open the requested " + (loadByGameMode ? gamemode + " " : "") + "ender chest. " + (target.getName().equals(user.getName()) ? "Have you been" : "Has &f" + target.getDisplayName() + "&r&e been") + " to the world \"&f" + worldName + "&r&e\" and opened that particular inventory yet?");
 			}
 			
-		} else if(invToOpen.equalsIgnoreCase("extra")) {
-			try{invToView = InventoryAPI.setTitle(target.getName() + "'s " + (loadByGameMode ? EPLib.capitalizeFirstLetter(gamemode).substring(0, 1) + " Extra Inventory" : "Extra Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraFileName, FolderName, dataFolderName, false), target));
+		} else if(invToOpen.equals("extra")) {
+			try{invToView = InventoryAPI.setTitle(limitStringToNumOfChars(target.getName(), 12) + "'s " + (loadByGameMode ? getFirstLetterOfGameMode(gm) + " Extra Inventory" : "Extra Inventory"), InventoryAPI.deserializeInventory(FileMgmt.ReadFromFile(extraFileName, FolderName, dataFolderName, false), target));
 			} catch (Exception e) {
-				invToView = (loadByGameMode ? getPlayerExtraChest(target, server.getWorld(worldName), gm) : getPlayerExtraChest(target, server.getWorld(worldName)));
+				invToView = (loadByGameMode ? getPlayerExtraChest(target, getWhatWorldToUseFromWorld(world != null ? world : target.getWorld())/*server.getWorld(worldName)*/, gm) : getPlayerExtraChest(target, server.getWorld(worldName)));
 			}
 		}
 		if(invToView != null) {
-			invToOpen = (invToOpen.equalsIgnoreCase("inv") ? "inv" : (invToOpen.equalsIgnoreCase("ender") ? "enderInv" : "extraChestInv"));
-			if(user.equals(target) && invToOpen.equalsIgnoreCase("extra") ? true : (user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + "." + target.getName()) || user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + ".*")) ) {
+			//invToOpen = (invToOpen.equals("inv") ? "inv" : (invToOpen.equals("ender") ? "enderInv" : "extraChestInv"));
+			if(user.equals(target) && invToOpen.equals("extra") ? true : (user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + "." + target.getName()) || user.hasPermission("eim.view." + (loadByGameMode ? "gamemode." + gamemode + "." : "") + invToOpen + ".*")) ) {
 				playersUsingInvsInfo.add(user.getName() + "|" + worldName);
 				user.openInventory(invToView);
 			} else {
@@ -871,27 +1140,24 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				if(invName.equals("container.crafting") || invName.equals("container.inventory")) {
 					sendDebugMsg("The owner is viewing their vanilla mc inventory. Let's save it and update the inv screens for it!");
 					sourceInv = owner.getOpenInventory().getBottomInventory();
-					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
-					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false, false);
+					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false, false);
 					return;
 				}
 				GameMode invGameMode = (loadByGameMode ? (invName.contains("'s S") ? GameMode.SURVIVAL : (invName.contains("'s C") ? GameMode.CREATIVE : (invName.contains("'s A") ? GameMode.ADVENTURE : null))) : null);
 				String invType = (invName.contains("Extra Inventory") ? "extra" : (invName.contains("Inventory") ? "inv" : (invName.contains("Ender Chest") ? "ender" : "UNKNOWN")));
 				sendDebugMsg("&1&n=====&r&eThe owner is viewing their \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it!");
-				updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false);
-				updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+				updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false, false);
+				updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false, false);
 				sendDebugMsg("&1&n=====&r&eThe owner is viewing their \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it!");
 			} else {
 				sendDebugMsg("&1&n=====&r *eSomeone else other than the owner is editing! That person is: \"&f" + editor.getName() + "&r&e\"; the owner is: \"&f" + owner.getName() + "&r&e!\"");
-				
 				String invType = "";
 				if(invName.contains("Extra Inventory")) {
 					invType = "extra";
 				} else if(invName.contains("Ender Chest")) {
-					sendDebugMsg("&1&n3 B");
 					invType = "ender";
 				} else if(invName.contains("Inventory")) {
-					sendDebugMsg("&1&n3 C");
 					invType = "inv";
 				}
 				String pGamemode = (loadByGameMode ? "gamemode." + (invName.contains("'s S") ? "survival." : (invName.contains("'s C") ? "creative." : (invName.contains("'s A") ? "adventure." : "UNKNOWN."))) : "");
@@ -899,24 +1165,25 @@ public class MainInvClass extends JavaPlugin implements Listener {
 				if(editor.hasPermission(perm) || editor.hasPermission(perm + "." + owner.getName()) || editor.hasPermission(perm + ".*") || editor.hasPermission("eim.edit.*") || editor.hasPermission("eim.*")) {
 					GameMode invGameMode = (loadByGameMode ? (invName.contains("'s S") ? GameMode.SURVIVAL : (invName.contains("'s C") ? GameMode.CREATIVE : (invName.contains("'s A") ? GameMode.ADVENTURE : null))) : null);
 					sendDebugMsg("&1&n=====&r&eThe editor is viewing the owners' \"&f" + invType + "&r&e\" inventory. Let's save it and update the inv screens for it, since the editor has permission!");
-					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false);
-					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
+					updateOwnersInvAndSave(owner, sourceInv, (loadByGameMode ? invGameMode : null), invType, owner.getWorld(), false, false);
+					updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false, false);
 				} else {
 					sendDebugMsg("&1&n=====&r&eThe editor did not have permission to edit the owners' inventory. Shutting it!");
+					evt.setCancelled(true);
 					closePlayerInventory(editor);
 				}
 			}
 			return;
 		} else if(invName.equals("container.enderchest")) {
-			updateOwnersInvAndSave(editor, sourceInv, (loadByGameMode ? editor.getGameMode() : null), "ender", editor.getWorld(), false);
-			updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false);
-			sendDebugMsg("The owner is viewing their ender chest. Let's save it and update the inv screens for it!");
+			updateOwnersInvAndSave(editor, sourceInv, (loadByGameMode ? editor.getGameMode() : null), "ender", editor.getWorld(), false, false);
+			updateOwnersInvAndSave(editor, editor.getOpenInventory().getBottomInventory(), (loadByGameMode ? editor.getGameMode() : null), "inv", editor.getWorld(), false, false);
+			sendDebugMsg(sendDevMsg("The owner is viewing their ender chest. Let's save it and update the inv screens for it!"));
 		} else {
-			sendDebugMsg("&1&nATTENTION!!!&r &e???<Unknown happenstance 001>");
+			sendDebugMsg("&1&nATTENTION!!!&r &e???<Unknown happenstance 001>... Top inventory title: \"&f" + evt.getView().getTopInventory().getTitle() + "&r&e\"; Bottom inventory title: \"&f" + evt.getView().getBottomInventory().getTitle() + "&r&e\"");
 		}
 	}
 	
-	void closePlayerInventory(final Player target) {
+	public void closePlayerInventory(final Player target) {
 		server.getScheduler().runTask(plugin, new Runnable() {
 			@Override
 			public void run() {
@@ -966,13 +1233,13 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		if(owner != null) {
 			if(invType.equals("container.inventory")) {
 				sendDebugMsg("&eDebug: 'invType' == \"" + invType + "\"! The inventory title is: &f" + inv.getTitle());
-				updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), true);
+				updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), true, false);
 				
 				return;
 			}
 			if(invType.equals("container.enderchest")) {
 				sendDebugMsg("&eDebug: 'invType' == \"" + invType + "\"! The inventory title is: &f" + inv.getTitle());
-				updateOwnersInvAndSave(owner, owner.getEnderChest(), (loadByGameMode ? owner.getGameMode() : null), "ender", owner.getWorld(), true);
+				updateOwnersInvAndSave(owner, owner.getEnderChest(), (loadByGameMode ? owner.getGameMode() : null), "ender", owner.getWorld(), true, false);
 				
 				return;
 			}
@@ -987,7 +1254,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					sendDebugMsg("&cThe invType didn't pan out! It still equals: \"&f" + invType + "&c\"!");
 					return;
 				}
-				updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true);
+				updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true, false);
 			} else {
 				sendDebugMsg("'owner'(&f" + owner.getName() + "&r&e) != 'player'(&f" + viewer.getName() + "&r&e)!");
 				sendDebugMsg("&1&nNow we check for perms!");
@@ -998,7 +1265,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 						sendDebugMsg("&cThe invType didn't pan out! It still equals: \"&f" + invType + "&c\"!");
 						return;
 					}
-					updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true);
+					updateOwnersInvAndSave(owner, inv, (loadByGameMode ? owner.getGameMode() : null), invType, owner.getWorld(), true, false);
 				} else {
 					sendDebugMsg("Unable to save the inventory \"&f" + invName + "&r&e\" because the viewer/editor (\"&f" + viewer.getName() + "&r&e\") did not have any of the following permissions: ");
 					sendDebugMsg("\"&f" + perm + "&r&e\";");
@@ -1014,7 +1281,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		}
 	}
 	
-	World getWorldFromPlayerInvInfo(Player owner, boolean removeFromList) {
+	World getWorldFromPlayerInvInfo(Player owner, boolean removeFromList) {// This is used to help with maintaining inventory screens.
 		World rtrn = owner.getWorld();
 		for(String player_worldName : playersUsingInvsInfo) {
 			String[] Info = player_worldName.split("\\|");
@@ -1044,7 +1311,17 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		});
 	}
 	
-	public static Inventory getPlayerExtraChest(Player target, World world, GameMode gm) {
+	void listPlayerInvScreenData() {
+		sendConsoleMessage(pluginName + "&aDebug: Listing all players who are currently using inventory screens:");
+		int x = 0;
+		for(String player_worldName : playersUsingInvsInfo) {
+			x++;
+			sendConsoleMessage(pluginName + "&aDebug:(&f" + x + "&r&a) &f" + player_worldName);
+		}
+	}
+	
+	public Inventory getPlayerExtraChest(Player target, World world, GameMode gm) {
+		world = getWhatWorldToUseFromWorld(world);
 		Inventory invToOpen = null;
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = target.getName();
@@ -1059,7 +1336,8 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		return invToOpen;
 	}
 	
-	public static Inventory getPlayerExtraChest(Player target, World world) {
+	public Inventory getPlayerExtraChest(Player target, World world) {
+		world = getWhatWorldToUseFromWorld(world);
 		Inventory invToOpen = null;
 		String worldName = world.getName().toLowerCase().replaceAll(" ", "_");
 		String playerName = target.getName();
@@ -1084,30 +1362,26 @@ public class MainInvClass extends JavaPlugin implements Listener {
 	
 	@EventHandler(priority=EventPriority.HIGHEST)
 	public void onPlayerPickupItemEvent(PlayerPickupItemEvent evt) {
-		Player player = evt.getPlayer();
-		sendDebugMsg("&1&n=====&r&6onPlayerPickupItemEvent&f(&aPlayerPickupItemEvent &2evt&f)&1&n=====&f: " + player.getName());
-		updateOwnersInvAndSave(player, player.getInventory(), (loadByGameMode ? player.getGameMode() : null), "inv", player.getWorld(), false);
+		Player owner = evt.getPlayer();
+		sendDebugMsg("&1&n=====&r&6onPlayerPickupItemEvent&f(&aPlayerPickupItemEvent &2evt&f)&1&n=====&f: " + owner.getName());
+		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false, false);
 	}
 	
 	@EventHandler(priority=EventPriority.HIGHEST)
 	public void onPlayerDropItemEvent(PlayerDropItemEvent evt) {
-		Player player = evt.getPlayer();
-		sendDebugMsg("&aPlayer name involved with onPlayerDropItemEvent(): &f" + player.getName());
 		Player owner = evt.getPlayer();
-
-		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
-
+		sendDebugMsg("&aPlayer name involved with onPlayerDropItemEvent(): &f" + owner.getName());
+		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false, true);
 	}
 	
 	@EventHandler(priority=EventPriority.HIGHEST)
 	public void onPlayerItemHeldEvent(org.bukkit.event.player.PlayerItemHeldEvent evt) {
-		sendDebugMsg("&aPlayerItemHeldEvent(&21/1&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
 		Player owner = evt.getPlayer();
-
-		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
-
+		sendDebugMsg("&aPlayerItemHeldEvent(&21/1&a): \"&f" + owner.getName() + "&r&a\"...");
+		updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false, true);
 	}
 	
+	@SuppressWarnings("deprecation")
 	@EventHandler(priority=EventPriority.HIGHEST)
 	public void onPlayerPlaceBlockEvent(PlayerInteractEvent evt) {
 		sendDebugMsg("&aPlayerInteractEvent(&21/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
@@ -1119,7 +1393,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 					sendDebugMsg("&aPlayerInteractEvent(&24/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
 					Player owner = evt.getPlayer();
 
-					updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false);
+					updateOwnersInvAndSave(owner, owner.getInventory(), (loadByGameMode ? owner.getGameMode() : null), "inv", owner.getWorld(), false, true);
 
 				} else {
 					sendDebugMsg("&aPlayerInteractEvent(&c-4/4&a): \"&f" + evt.getPlayer().getName() + "&r&a\"...");
@@ -1132,29 +1406,29 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		}
 	}
 	
-	Inventory updateOwnersInvAndSave(final Player owner, final Inventory inv, final GameMode gm, final String invType, World givenWorld, final boolean removeFromList) {
+	Inventory updateOwnersInvAndSave(final Player owner, final Inventory inv, final GameMode gm, final String invType, World givenWorld, final boolean removeFromList, final boolean delCursorItem) {
 		sendDebugMsg("0&1&n");
 		final World world = getWhatWorldToUseFromWorld(givenWorld);
 		String UFownerName = "";
 		if(owner != null) {
-			sendDebugMsg("&1&n1");
+			sendDevMsg("&1&n1");
 			UFownerName = limitStringToNumOfChars(owner.getName(), 12);
 		}
 		final String ownerName = UFownerName;
 		server.getScheduler().runTask(plugin, new Runnable() {
 			@Override
 			public void run() {
-				sendDebugMsg("&1&n2");
-				sendDebugMsg("&6updateOwnersInv&f(&cfinal &aPlayer &2owner(" + ownerName + ")&f. &cfinal &aInventory &2inv(" + inv.getTitle() + ")&f, &cfinal &2GameMode gm(" + (gm != null ? gm.name() : "null") + ")&f, &cfinal &aString &2invType(" + invType.toLowerCase() + ")&f, &cfinal &aWorld &2world(" + world.getName() + ")&f, &cfinal boolean &2removeFromList(" + removeFromList + ")&f)");
+				sendDevMsg("&1&n2");
+				sendDevMsg("&6updateOwnersInvAndSave&f(&cfinal &aPlayer &2owner(" + ownerName + ")&f. &cfinal &aInventory &2inv(" + inv.getTitle() + ")&f, &cfinal &2GameMode gm(" + (gm != null ? gm.name() : "null") + ")&f, &cfinal &aString &2invType(" + invType.toLowerCase() + ")&f, &cfinal &aWorld &2world(" + world.getName() + ")&f, &cfinal boolean &2removeFromList(" + removeFromList + ")&f)");
 				if(gm != null) {// if(loadByGameMode) {
-					sendDebugMsg("&1&n3 A");
+					sendDevMsg("&1&n3 A");
 					sendDebugMsg("'gm' != null! It equals: &3" + gm.name());
 					if(owner.getGameMode().equals(gm)) {
-						sendDebugMsg("&1&n4 A");
+						sendDevMsg("&1&n4 A");
 						sendDebugMsg("The owners' gamemode is the same as 'gm'!");
 						World ownersWorld = getWhatWorldToUseFromWorld(getWorldFromPlayerInvInfo(owner, removeFromList));
 						if(ownersWorld.getName().equals(world.getName())) {
-							sendDebugMsg("&1&n5 A");
+							sendDevMsg("&1&n5 A");
 							sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
 							String FolderName = "Inventories" + File.separatorChar + owner.getName();
 							String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_") + (gm.equals(GameMode.SURVIVAL) ? ".survival" : (gm.equals(GameMode.CREATIVE) ? ".creative" : (gm.equals(GameMode.ADVENTURE) ? ".adventure" : ".UNKNOWN")));
@@ -1162,19 +1436,19 @@ public class MainInvClass extends JavaPlugin implements Listener {
 							String gamemode = " " + (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
 							boolean Continue = true;
 							if(invType.equalsIgnoreCase("inv")) {
-								sendDebugMsg("&1&n6 A");
+								sendDevMsg("&1&n6 A");
 								fileNameToSaveTo += ".inv";
 								invName = ownerName + "'s" + gamemode + " Inventory";
 							} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
-								sendDebugMsg("&1&n6 B");
+								sendDevMsg("&1&n6 B");
 								fileNameToSaveTo += ".enderInv";
 								invName = ownerName + "'s" + gamemode + " Ender Chest";
 							} else if(invType.equalsIgnoreCase("extra")) {
-								sendDebugMsg("&1&n6 C");
+								sendDevMsg("&1&n6 C");
 								fileNameToSaveTo += ".extraChestInv";
 								invName = ownerName + "'s" + gamemode + " Extra Inventory";
 							} else {
-								sendDebugMsg("&1&n6 D");
+								sendDevMsg("&1&n6 D");
 								Continue = false;
 							}
 							GameMode invGameMode = (inv.getTitle().contains("'s S") ? GameMode.SURVIVAL : (inv.getTitle().contains("'s C") ? GameMode.CREATIVE : (inv.getTitle().contains("'s A") ? GameMode.ADVENTURE : null)));
@@ -1187,46 +1461,66 @@ public class MainInvClass extends JavaPlugin implements Listener {
 								
 								
 								if(invType.equalsIgnoreCase("inv")) {
-									sendDebugMsg("&1&n6_1 A");
+									sendDevMsg("&1&n6_1 A");
 									fileNameToSaveTo += ".inv";
 									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Inventory";
 								} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
-									sendDebugMsg("&1&n6_1 B");
+									sendDevMsg("&1&n6_1 B");
 									fileNameToSaveTo += ".enderInv";
 									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Ender Chest";
 								} else if(invType.equalsIgnoreCase("extra")) {
-									sendDebugMsg("&1&n6_1 C");
+									sendDevMsg("&1&n6_1 C");
 									fileNameToSaveTo += ".extraChestInv";
 									invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Extra Inventory";
 								}
 								
 								
 								
-								sendDebugMsg("&1&n7_1 A");
+								sendDevMsg("&1&n7_1 A");
 								sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
 								boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
 								sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"! The owners' inventory has NOT been updated[the owner's gamemode(\"&f" + gm.name().toLowerCase() + "&e\") != the inventory's gamemode(\"&f" + invGameMode.name().toLowerCase() + "&e\")!].");
-								updateViewersInvScreens(owner, inv, invGameMode, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+								updateViewersInvScreens(owner, inv, invGameMode, invType, delCursorItem, true);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
 								
 								return;
 							}
 							if(Continue) {
-								sendDebugMsg("&1&n7 A");
+								sendDevMsg("&1&n7 A");
 								sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
 								boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
 								sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"!" + (invType.equalsIgnoreCase("inv") ? " The owners' inventory has been updated." : ""));
 								if(invType.equalsIgnoreCase("inv")) {
+									sendDevMsg("&1&n7 A_1");
 									owner.getInventory().setContents(inv.getContents());
+									if(delCursorItem) {owner.getOpenInventory().setCursor(null);}
+								} else if(invType.equalsIgnoreCase("ender")) {
+									sendDevMsg("&1&n7 A_2");
+									if(owner.getOpenInventory().getTopInventory().getTitle().equals("container.enderchest")) {
+										sendDevMsg("&1&n7 A_2 A");
+										if(gm.equals(owner.getGameMode())) {
+											sendDevMsg("&1&n7 A_2 A_1");
+											
+											owner.getOpenInventory().getTopInventory().setContents(inv.getContents());
+											if(delCursorItem) {owner.getOpenInventory().setCursor(null);}
+										}
+									}
+								} else if(invType.equalsIgnoreCase("extra")) {
+									sendDevMsg("&1&n7 A_3");
+									//Don't code anything here, it's already been coded elsewhere!
 								}
-								updateViewersInvScreens(owner, inv, gm, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+								
+								
+								
+								
+								updateViewersInvScreens(owner, inv, gm, invType, delCursorItem, invType.equalsIgnoreCase("extra"));//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
 							} else {
-								sendDebugMsg("&1&n7 B");
+								sendDevMsg("&1&n7 B");
 								sendDebugMsg("The invType wasn't one of the four applicable strings! Why is it set to \"&f" + invType + "&r&e\"???");
 								return;
 							}
-							sendDebugMsg("&1&n8");
+							sendDevMsg("&1&n8");
 						} else {
-							sendDebugMsg("&1&n5 B");
+							sendDevMsg("&1&n5 B");
 							sendDebugMsg("&1&n=====ATTENTION=====");
 							sendDebugMsg("&1&n=====ATTENTION=====");
 							sendDebugMsg("&1&n'world': &r&f" + world.getName());
@@ -1235,7 +1529,7 @@ public class MainInvClass extends JavaPlugin implements Listener {
 							sendDebugMsg("&1&n=====ATTENTION=====");
 						}
 					} else {
-						sendDebugMsg("&1&n4 B");
+						sendDevMsg("&1&n4 B");
 						
 						
 						
@@ -1246,33 +1540,33 @@ public class MainInvClass extends JavaPlugin implements Listener {
 						sendDebugMsg("The owners' gamemode is NOT the same as 'gm'! Owner's gamemode: &f" + owner.getGameMode().name().toLowerCase() + "&r&e; 'gm': &f" + gm.name().toLowerCase());
 						World ownersWorld = getWhatWorldToUseFromWorld(getWorldFromPlayerInvInfo(owner, removeFromList));
 						if(ownersWorld.getName().equals(world.getName())) {
-							sendDebugMsg("&1&n5 A");
+							sendDevMsg("&1&n5 A");
 							sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
 							String FolderName = "Inventories" + File.separatorChar + owner.getName();
 							String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_") + (invGameMode.equals(GameMode.SURVIVAL) ? ".survival" : (invGameMode.equals(GameMode.CREATIVE) ? ".creative" : (invGameMode.equals(GameMode.ADVENTURE) ? ".adventure" : ".UNKNOWN")));
 							String invName = "";
 							sendDebugMsg("&1&n=====&r &eThe inventory's gamemode does not match the owners' gamemode! We shall just have to act as if the owner weren't here....");
 							if(invType.equalsIgnoreCase("inv")) {
-								sendDebugMsg("&1&n6_1 A");
+								sendDevMsg("&1&n6_1 A");
 								fileNameToSaveTo += ".inv";
 								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Inventory";
 							} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
-								sendDebugMsg("&1&n6_1 B");
+								sendDevMsg("&1&n6_1 B");
 								fileNameToSaveTo += ".enderInv";
 								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Ender Chest";
 							} else if(invType.equalsIgnoreCase("extra")) {
-								sendDebugMsg("&1&n6_1 C");
+								sendDevMsg("&1&n6_1 C");
 								fileNameToSaveTo += ".extraChestInv";
 								invName = ownerName + "'s " + getFirstLetterOfGameMode(invGameMode) + " Extra Inventory";
 							}
-							sendDebugMsg("&1&n7_1 A");
+							sendDevMsg("&1&n7_1 A");
 							sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
 							boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
 							sendDebugMsg("The plugin has " + (success ? "successfully written to" : "failed to write to") + " the file &z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e for the inventory \"&f" + invName + "&r&e\"! The owners' inventory has NOT been updated[the owner's gamemode(\"&f" + gm.name().toLowerCase() + "&e\") != the inventory's gamemode(\"&f" + invGameMode.name().toLowerCase() + "&e\")!].");
-							updateViewersInvScreens(owner, inv, invGameMode, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
-							sendDebugMsg("&1&n8");
+							updateViewersInvScreens(owner, inv, invGameMode, invType, delCursorItem, true);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+							sendDevMsg("&1&n8");
 						} else {
-							sendDebugMsg("&1&n5 B");
+							sendDevMsg("&1&n5 B");
 							sendDebugMsg("&1&n=====ATTENTION=====");
 							sendDebugMsg("&1&n=====ATTENTION=====");
 							sendDebugMsg("&1&n'world': &r&f" + world.getName());
@@ -1295,47 +1589,48 @@ public class MainInvClass extends JavaPlugin implements Listener {
 						
 					}
 				} else {// if(loadByGameMode == false) {
-					sendDebugMsg("&1&n3 B");
+					sendDevMsg("&1&n3 B");
 					World ownersWorld = getWhatWorldToUseFromWorld(owner.getWorld());
 					if(ownersWorld.getName().equals(world.getName())) {
-						sendDebugMsg("&1&n4 A");
+						sendDevMsg("&1&n4 A");
 						sendDebugMsg("The owner is in the 'world'(&f" + world.getName() + "&r&e)!");
 						String FolderName = "Inventories" + File.separatorChar + owner.getName();
 						String fileNameToSaveTo = world.getName().toLowerCase().replaceAll(" ", "_");
 						String invName = "";
 						boolean Continue = true;
 						if(invType.equalsIgnoreCase("inv")) {
-							sendDebugMsg("&1&n5 A");
+							sendDevMsg("&1&n5 A");
 							fileNameToSaveTo += ".inv";
 							invName = ownerName + "'s Inventory";
 						} else if(invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest")) {
-							sendDebugMsg("&1&n5 B");
+							sendDevMsg("&1&n5 B");
 							fileNameToSaveTo += ".inv";
 							invName = ownerName + "'s Ender Chest";
 						} else if(invType.equalsIgnoreCase("extra")) {
-							sendDebugMsg("&1&n5 C");
+							sendDevMsg("&1&n5 C");
 							fileNameToSaveTo += ".inv";
 							invName = ownerName + "'s Extra Inventory";
 						} else {
-							sendDebugMsg("&1&n5 D");
+							sendDevMsg("&1&n5 D");
 							Continue = false;
 						}
 						if(Continue) {
-							sendDebugMsg("&1&n6 A");
+							sendDevMsg("&1&n6 A");
 							sendDebugMsg("'fileNameToSaveTo' == &f" + fileNameToSaveTo);
 							boolean success = FileMgmt.WriteToFile(fileNameToSaveTo, InventoryAPI.serializeInventory(InventoryAPI.setTitle(invName, inv)), true, FolderName, dataFolderName);
 							sendDebugMsg("&1&n=====&r &eThe plugin has " + (success ? "successfully written to" : "failed to write to") + " the file \"&z&f" + dataFolderName + File.separatorChar + FolderName + File.separatorChar + fileNameToSaveTo + "&z&r&e\" for the inventory \"&f" + invName + "&r&e\"!" + (invType.equalsIgnoreCase("inv") ? " The owners' inventory has been updated." : ""));
 							if(invType.equalsIgnoreCase("inv")) {
 								owner.getInventory().setContents(inv.getContents());
+								if(delCursorItem) {owner.getOpenInventory().setCursor(null);}
 							}
-							updateViewersInvScreens(owner, inv, null, invType);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
+							updateViewersInvScreens(owner, inv, null, invType, delCursorItem, false);//Update all online players' top inventory screens(if it's the owners') to the 'inv' inventory!
 						} else {
-							sendDebugMsg("&1&n6 B");
+							sendDevMsg("&1&n6 B");
 							sendDebugMsg("The invType wasn't one of the four applicable strings! Why is it set to \"&f" + invType + "&r&e\"???");
 							return;
 						}
 					} else {
-						sendDebugMsg("&1&n4 B");
+						sendDevMsg("&1&n4 B");
 						sendDebugMsg("&1&n=====ATTENTION=====");
 						sendDebugMsg("&1&n=====ATTENTION=====");
 						sendDebugMsg("&1&n'world': &r&f" + world.getName());
@@ -1344,46 +1639,70 @@ public class MainInvClass extends JavaPlugin implements Listener {
 						sendDebugMsg("&1&n=====ATTENTION=====");
 					}
 				}
-				sendDebugMsg("&1&nThe End!");
+				sendDevMsg("&1&nThe End!");
 			}
 		});
 		sendDebugMsg("&1&nEnd of updateOwnersInvAndSave(); beginning of public void run()...");
 		return inv;
 	}
 	
-	String getFirstLetterOfGameMode(GameMode gm) {
-		return gm.name().substring(0, 1).toUpperCase();
-	}
-	
-	String sendDebugMsg(String str) {
-		return (forceDebugMsgs ? sendConsoleMessage(pluginName + "&eDebug: " + str) : EPLib.formatColorCodes(pluginName + "&eDebug: " + str));
-	}
-	
-	Inventory updateViewersInvScreens(final Player owner, final Inventory inv, final GameMode gm, final String invType) {
+	Inventory updateViewersInvScreens(final Player owner, final Inventory inv, final GameMode gm, final String invType, final boolean delCursorItem, final boolean updateOwnersInvAsWell) {
 		server.getScheduler().runTask(plugin, new Runnable() {
 			@Override
 			public void run() {
+				String ownerName = owner.getName();
+				boolean runOnce = false;
 				for(Player curPlayer : server.getOnlinePlayers()) {
 					Inventory viewersInv = curPlayer.getOpenInventory().getTopInventory();
-					if(gm == null) {// if(loadByGameMode == false) {
-						String invTitleToUpdateBy = owner.getName() + "'s " + (invType.equalsIgnoreCase("inv") ? "Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? "Ender Chest" : "Extra Inventory"));
-						sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
-						if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
-							curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
-						} else if(curPlayer.getName().equals(owner.getName())) {
-							sendDebugMsg("");
-						} else {
-							sendDebugMsg("...but alas, it does not...");
+					if(curPlayer.getName().equals(ownerName) == false) {
+						if(gm == null) {// if(loadByGameMode == false) {
+							String invTitleToUpdateBy = ownerName + "'s " + (invType.equalsIgnoreCase("inv") ? "Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? "Ender Chest" : "Extra Inventory"));
+							sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+							if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+								curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
+								if(delCursorItem) {curPlayer.getOpenInventory().setCursor(null);}
+							} else if(curPlayer.getName().equals(ownerName)) {
+								sendDebugMsg("");
+							} else {
+								sendDebugMsg("...but alas, it does not...");
+							}
+						} else {// if(loadByGameMode) {
+							String gamemode = (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
+							String invTitleToUpdateBy = limitStringToNumOfChars(ownerName, 12) + "'s " + (invType.equalsIgnoreCase("inv") ? gamemode + " Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? gamemode + " Ender Chest" : gamemode + " Extra Inventory"));
+							sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+							if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+								curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
+								if(delCursorItem) {curPlayer.getOpenInventory().setCursor(null);}
+							} else {
+								sendDebugMsg("...but alas, it does not...");
+							}
 						}
-					} else {// if(loadByGameMode) {
-						String gamemode = (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
-						String invTitleToUpdateBy = limitStringToNumOfChars(owner.getName(), 12) + "'s " + (invType.equalsIgnoreCase("inv") ? gamemode + " Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? gamemode + " Ender Chest" : gamemode + " Extra Inventory"));
-						sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
-						if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
-							curPlayer.getOpenInventory().getTopInventory().setContents(inv.getContents());
-						} else {
-							sendDebugMsg("...but alas, it does not...");
+					} else if(updateOwnersInvAsWell && runOnce == false) {
+						runOnce = true;
+						if(gm == null) {// if(loadByGameMode == false) {
+							String invTitleToUpdateBy = ownerName + "'s " + (invType.equalsIgnoreCase("inv") ? "Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? "Ender Chest" : "Extra Inventory"));
+							sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+							if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+								owner.getOpenInventory().getTopInventory().setContents(inv.getContents());
+								if(delCursorItem) {owner.getOpenInventory().setCursor(null);}
+							} else if(owner.getName().equals(ownerName)) {
+								sendDebugMsg("");
+							} else {
+								sendDebugMsg("...but alas, it does not...");
+							}
+						} else {// if(loadByGameMode) {
+							String gamemode = (gm.equals(GameMode.SURVIVAL) ? "S" : (gm.equals(GameMode.CREATIVE) ? "C" : (gm.equals(GameMode.ADVENTURE) ? "A" : "U")));
+							String invTitleToUpdateBy = limitStringToNumOfChars(ownerName, 12) + "'s " + (invType.equalsIgnoreCase("inv") ? gamemode + " Inventory" : (invType.equalsIgnoreCase("ender") || invType.equalsIgnoreCase("enderchest") ? gamemode + " Ender Chest" : gamemode + " Extra Inventory"));
+							sendDebugMsg("\"&f" + viewersInv.getTitle() + "\"&r&e is supposed to equal \"&f" + invTitleToUpdateBy + "&r&e\" if we are to update it!");
+							if(viewersInv.getTitle().equals(invTitleToUpdateBy)) {
+								owner.getOpenInventory().getTopInventory().setContents(inv.getContents());
+								if(delCursorItem) {owner.getOpenInventory().setCursor(null);}
+							} else {
+								sendDebugMsg("...but alas, it does not...");
+							}
 						}
+					} else {
+						sendDevMsg("Not updating the owners inventory this time because \"updateOwnersInvAsWell\" equals false!");
 					}
 				}
 			}
@@ -1391,8 +1710,10 @@ public class MainInvClass extends JavaPlugin implements Listener {
 		return inv;
 	}
 	
-	String limitStringToNumOfChars(String str, int limit) {
-		return (str != null ? (str.length() >= 1 ? (str.substring(0, (str.length() >= limit ? limit : str.length()))) : "") : "");
-	}
+	String getFirstLetterOfGameMode(GameMode gm) {return gm.name().substring(0, 1).toUpperCase();}
+	
+	String sendDebugMsg(String str) {return ((forceDebugMsgs || showDebugMsgs) ? sendConsoleMessage(pluginName + "&eDebug: " + str) : EPLib.formatColorCodes(pluginName + "&eDebug: " + str));}
+	
+	String limitStringToNumOfChars(String str, int limit) {return (str != null ? (str.length() >= 1 ? (str.substring(0, (str.length() >= limit ? limit : str.length()))) : "") : "");}
 	
 }

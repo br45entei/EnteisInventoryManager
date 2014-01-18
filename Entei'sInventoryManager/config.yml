@@ -1,15 +1,69 @@
-showDebugMsgs: true
-noPermission: You do not have permission to use this command.
+# Important! Make sure this config.yml file's version setting matches the version of the plugin!
+version: "0.4"
 
-# Set this to false to enable world inventory merging; true to disable.
+# This allows debugging messages to be sent to the console when the 
+# plugin is being used.
+# Default: false
+showDebugMsgs: false
+
+# Enable this if you don't want any worlds to share inventories, or 
+# disable it if you do.
+# Enabling this disables the "Inventory Listing Section" entirely.
 # Default: true
 worldsHaveSeparateInventories: true
 
-# Here you can list you own customized set of merged inventories.
-# Be sure to follow the template provided below.
+# This is the message sent to the command sender if
+# they don't have permission to use the command they typed.
+# Default: "You do not have permission to use this command."
+noPermission: "You do not have permission to use this command."
 
-numberOfLists: 1
-
-list_1: "|skyworld|world"
-
+# This allows you to set whether or not player experience levels are
+# saved and loaded with the player inventories or not.
+# Default: true
 manageExp: true
+
+# This allows you to set whether or not player health is saved
+# and loaded with the player inventories or not.
+# Default: true
+manageHealth: true
+
+# This allows you to set whether or not player hunger and
+# hunger saturation levels are saved and loaded with the player
+# inventories or not.
+# Default: true
+manageHunger: true
+
+# This tells the plugin that you want the players' inventories to be
+# separated by gamemode for each world.
+# Set it to true: inventories will be per-gamemode as well as your
+# setting of "worldsHaveSeparateInventories".
+# Set it to false: Default Minecraft behavior(gamemodes are ignored)
+# and your setting of "worldsHaveSeparateInventories".
+# Default: false
+loadByGameMode: false
+
+
+# Inventory Listing Section ------------------------------------------
+
+# This is the number of lists that are shown below.
+# Setting this to a number lower than the amount of lists you set will
+# cause the plugin to ignore the lists past the number you set here.
+# On the other hand, setting this number higher than the amount of
+# lists shown below will cause the plugin to complain about you not
+# having listed each list past the actual amount of lists that you set.
+numberOfLists: 2
+
+# Enter your worlds in the following format:
+# 
+#list_#: "world1Name|world2Name"
+# 
+# (Where '#' is the number of the list, in order from 1 to how many 
+# lists there are, top to bottom.
+# Example:
+# 
+#list_1: "pvpWorld|arenaSpleefWorld"
+#list_2: "spawnWorld|survivalWorld"
+#
+
+list_1: "world_a|world_c"
+list_2: "world_b"
