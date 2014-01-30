@@ -1,6 +1,6 @@
 name: EnteisInventoryManager
 prefix: "Entei's Inventory Manager"
-version: 0.4
+version: "0.45_BETA"
 description: >
   Manages per-world player inventories.
 
@@ -19,37 +19,98 @@ commands:
   view:
     description: "Lets you view other peoples' inventories."
     usage: "/view {inv|ender|extra} or /view {playerName} {inv|ender|extra}"
+  viewOffline:
+    description: "Lets you view an offline players' inventory(If they ever logged on)."
+    usage: "/viewOffline {playerName} {inv|ender|extra|armor|armour} or /viewOffline {playerName} {worldName} {gameMode} {inv|ender|extra|armor|armour}"
   invperm:
     description: "Lets you control who can view your inventories. THIS IS IN BETA! USE WITH CAUTION."
-    usage: "/invperm {give|take} {view|edit} {inv|ender|extra} {playerName} or /invperm {ownerName} {give|take} {view|edit} {inv|ender|extra} {playerName}"
-  listinvscreendata:
-    description: "A console command used for debugging purposes."
-    usage: "/listinvscreendata"
-
+    usage: "/invperm {give|take} {view|edit} {inv|ender|extra|armorinv|armourinv} {playerName} or /invperm {give|take} {view|edit} {gamemode} {worldName} {inv|ender|extra|armorinv|armourinv} {playerName} [ownerName]"
+#  listinvscreendata:
+#    description: "A console command used for debugging purposes."
+#    usage: "/listinvscreendata"
 
 permissions:
   eim.*:
-    description: "Gives access to all permissions."
+    description: "Gives access to all permissions, commands, and abilites pertaining to this plugin."
     children:
       eim.view.others:
-        description: "Gives permission to view another person's inventory, if they have that person's permission."
-      eim.view.*: #or eim.view.gamemode.{survival|creative|adventure}.*
-        description: "Gives permission to view anyone's inventories, regardless of their permissions."
+        description: "Gives permission to view another person's inventory, if they have that person's permission as well."
+      eim.view.*:
+        description: "Gives permission to view anyone's inventory(of any type), regardless of their permissions."
         children:
-          eim.view.inv.*: #or eim.view.gamemode.{survival|creative|adventure}.inv.*
-            description: "Gives permission to view anyone's vanilla Minecraft inventory, regardless of their permissions."
-          eim.view.ender.*: #or eim.view.gamemode.{survival|creative|adventure}.ender.*
-            description: "Gives permission to view anyone's vanilla Minecraft ender chest inventory, regardless of their permissions."
-          eim.view.extra.*: #or eim.view.gamemode.{survival|creative|adventure}.extra.*
-            description: "Gives permission to view anyone's extra double-chest sized inventory, regardless of their permissions."
+          eim.view.inv.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's inventory, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.view.gamemode.GAMEMODE.inv.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE inventory, but only when the per-world saving mode is disabled."
+          eim.view.inv.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's inventory in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.view.gamemode.GAMEMODE.inv.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE inventory in the world WORLDNAME."
+
+          eim.view.ender.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's ender chest, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.view.gamemode.GAMEMODE.ender.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE ender chest, but only when the per-world saving mode is disabled."
+          eim.view.ender.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's ender chest in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.view.gamemode.GAMEMODE.ender.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE ender chest in the world WORLDNAME."
+
+          eim.view.extra.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's extra chest, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.view.gamemode.GAMEMODE.extra.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE extra chest, but only when the per-world saving mode is disabled."
+          eim.view.extra.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's extra chest in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.view.gamemode.GAMEMODE.extra.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE extra chest in the world WORLDNAME."
+
+          eim.view.armor.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's armour inventory, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.view.gamemode.GAMEMODE.armor.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE armour inventory, but only when the per-world saving mode is disabled."
+          eim.view.armor.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's armour inventory in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.view.gamemode.GAMEMODE.armor.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE armour inventory in the world WORLDNAME."
+
       eim.edit.others:
-        description: "Gives permission to edit another person's inventory, if they have that person's permission."
-      eim.edit.*: #or eim.edit.gamemode.{survival|creative|adventure}.*
-        description: "Gives permission to edit anyone's inventories, regardless of their permissions."
+        description: "Gives permission to edit another person's inventory, if they have that person's permission as well."
+      eim.edit.*:
+        description: "Gives permission to edit anyone's inventory(of any type), regardless of their permissions."
         children:
-          eim.edit.inv.*: #or eim.edit.gamemode.{survival|creative|adventure}.inv.*
-            description: "Gives permission to edit anyone's vanilla Minecraft inventory, regardless of their permissions."
-          eim.edit.ender.*: #or eim.edit.gamemode.{survival|creative|adventure}.ender.*
-            description: "Gives permission to edit anyone's vanilla Minecraft ender chest inventory, regardless of their permissions."
-          eim.edit.extra.*: #or eim.edit.gamemode.{survival|creative|adventure}.extra.*
-            description: "Gives permission to edit anyone's extra double-chest sized inventory, regardless of their permissions."
+          eim.edit.inv.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's inventory, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.edit.gamemode.GAMEMODE.inv.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE inventory, but only when the per-world saving mode is disabled."
+          eim.edit.inv.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's inventory in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.edit.gamemode.GAMEMODE.inv.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to edit PLAYERNAME's GAMEMODE inventory in the world WORLDNAME."
+
+          eim.edit.ender.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's ender chest, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.edit.gamemode.GAMEMODE.ender.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE ender chest, but only when the per-world saving mode is disabled."
+          eim.edit.ender.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's ender chest in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.edit.gamemode.GAMEMODE.ender.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to edit PLAYERNAME's GAMEMODE ender chest in the world WORLDNAME."
+
+          eim.edit.extra.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's extra chest, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.edit.gamemode.GAMEMODE.extra.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's GAMEMODE extra chest, but only when the per-world saving mode is disabled."
+          eim.edit.extra.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's extra chest in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.edit.gamemode.GAMEMODE.extra.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to edit PLAYERNAME's GAMEMODE extra chest in the world WORLDNAME."
+
+          eim.edit.armor.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's armour inventory, but only when the per-gamemode and per-world saving modes are disabled."
+          eim.edit.gamemode.GAMEMODE.armor.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's armour inventory, but only when the per-world saving mode is disabled."
+          eim.edit.armor.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to view PLAYERNAME's armour inventory in the world WORLDNAME, but only when the per-gamemode saving mode is disabled."
+          eim.edit.gamemode.GAMEMODE.armor.world.WORLDNAME.owner.PLAYERNAME:
+            description: "Gives permission to edit PLAYERNAME's GAMEMODE armour inventory in the world WORLDNAME."

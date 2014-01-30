@@ -1,8 +1,8 @@
 # Important! Make sure this config.yml file's version setting matches the version of the plugin!
-version: "0.4"
+version: "0.45_BETA"
 
 # This allows debugging messages to be sent to the console when the 
-# plugin is being used.
+# plugin is being used. May spam console with many messages.
 # Default: false
 showDebugMsgs: false
 
@@ -11,6 +11,15 @@ showDebugMsgs: false
 # Enabling this disables the "Inventory Listing Section" entirely.
 # Default: true
 worldsHaveSeparateInventories: true
+
+# This tells the plugin that you want the players' inventories to be
+# separated by gamemode for each world.
+# Set it to true: inventories will be per-gamemode as well as your
+# setting of "worldsHaveSeparateInventories".
+# Set it to false: Default Minecraft behavior(gamemodes are ignored)
+# and your setting of "worldsHaveSeparateInventories".
+# Default: false
+loadByGameMode: false
 
 # This is the message sent to the command sender if
 # they don't have permission to use the command they typed.
@@ -27,21 +36,33 @@ manageExp: true
 # Default: true
 manageHealth: true
 
+# This allows you to set whether or not player potion effects are
+# saved and loaded with the player inventories or not.
+# Default: true
+manageEffects: true
+
+# This allows you to have the plugin automatically update and save
+# all online players' effects every 30 seconds so that they don't
+# try to glitch the server and get more effect time.
+# Note that this can add more read/writes to your hard drive,
+# causing progressed eventual hard drive failure(if left on ridiculously long).
+# You can set this to true and then turn it off later by typing the following
+# into the console: "/eim deactivate30sectimer", or "/eim activate30sectimer"
+# to re-activate it again.
+# This only works if "manageEffects" is set to true.
+# Default: false
+updatePlayerPotionEffectsEvery30Seconds: false
+
 # This allows you to set whether or not player hunger and
 # hunger saturation levels are saved and loaded with the player
 # inventories or not.
 # Default: true
 manageHunger: true
 
-# This tells the plugin that you want the players' inventories to be
-# separated by gamemode for each world.
-# Set it to true: inventories will be per-gamemode as well as your
-# setting of "worldsHaveSeparateInventories".
-# Set it to false: Default Minecraft behavior(gamemodes are ignored)
-# and your setting of "worldsHaveSeparateInventories".
+# This sets whether or not any player can view and edit their extra
+# chest inventory by default.(Command to use would be: "/view extra")
 # Default: false
-loadByGameMode: false
-
+ownerCanEditExtraChestByDefault: false
 
 # Inventory Listing Section ------------------------------------------
 
